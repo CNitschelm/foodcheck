@@ -1,0 +1,994 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16a34a">
+<title>FoodCheck</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root{
+  --bg:#f6f7f8; --card:#ffffff; --text:#111827; --muted:#6b7280; --line:#e5e7eb;
+  --good:#16a34a; --good-bg:#dcfce7; --bad:#dc2626; --bad-bg:#fee2e2;
+  --accent:#16a34a; --nav-h:64px; --radius:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0f1115; --card:#1a1d23; --text:#e5e7eb; --muted:#9ca3af; --line:#2a2f37;
+         --good-bg:#123920; --bad-bg:#3d1414; }
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px}
+button,input,select,textarea{font:inherit;color:inherit}
+img{display:block}
+
+header{position:sticky;top:0;z-index:20;background:var(--bg);
+  padding:10px 14px 6px;padding-top:calc(10px + env(safe-area-inset-top));
+  display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
+header h1{font-size:19px;margin:0;flex:1;display:flex;align-items:center;gap:8px}
+header h1 .logo{font-size:22px}
+#syncBtn{border:1px solid var(--line);background:var(--card);border-radius:999px;
+  padding:6px 12px;font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer}
+#syncDot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+#syncDot.ok{background:var(--good)} #syncDot.err{background:var(--bad)}
+#syncDot.busy{background:#f59e0b;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.3}}
+
+main{padding:12px 14px calc(var(--nav-h) + 24px + env(safe-area-inset-bottom));
+  max-width:860px;margin:0 auto}
+section[hidden]{display:none}
+
+/* ---- list view ---- */
+.searchrow{display:flex;gap:8px;margin-bottom:10px}
+#searchBox{flex:1;padding:12px 14px;border-radius:var(--radius);border:1px solid var(--line);
+  background:var(--card);font-size:16px;min-width:0}
+#sortSel{border:1px solid var(--line);background:var(--card);border-radius:var(--radius);padding:0 8px;font-size:14px}
+.chips{display:flex;gap:8px;margin-bottom:6px;overflow-x:auto;padding-bottom:4px}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:999px;
+  padding:8px 16px;font-size:14px;cursor:pointer;white-space:nowrap;font-weight:500}
+.chip.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.chip.on.good{background:var(--good);border-color:var(--good);color:#fff}
+.chip.on.bad{background:var(--bad);border-color:var(--bad);color:#fff}
+#countLine{font-size:13px;color:var(--muted);margin:2px 2px 10px}
+#cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  overflow:hidden;cursor:pointer;position:relative;display:flex;flex-direction:column}
+.card .ph{width:100%;aspect-ratio:1/1;object-fit:cover;background:var(--line)}
+.card .noph{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;
+  font-size:40px;background:var(--line);color:var(--muted)}
+.card .info{padding:8px 10px 10px}
+.card .nm{font-size:14px;font-weight:600;line-height:1.25;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .br{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{position:absolute;top:8px;left:8px;border-radius:999px;padding:4px 10px;
+  font-size:12px;font-weight:700;color:#fff}
+.badge.good{background:var(--good)} .badge.bad{background:var(--bad)}
+.nscore{position:absolute;top:8px;right:8px;width:26px;height:26px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;
+  font-size:14px;text-transform:uppercase}
+.empty{color:var(--muted);text-align:center;padding:60px 20px;font-size:15px;line-height:1.6}
+
+/* ---- add view ---- */
+.formcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px;margin-bottom:12px}
+.formcard h3{margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.photobtns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.photobtn{border:2px dashed var(--line);border-radius:var(--radius);background:transparent;
+  padding:14px 8px;text-align:center;cursor:pointer;color:var(--muted);min-height:110px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;position:relative;overflow:hidden}
+.photobtn .ico{font-size:28px}
+.photobtn .lb{font-size:13px;font-weight:600;color:var(--text)}
+.photobtn .sub{font-size:11px}
+.photobtn img.prev{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.photobtn .clear{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);color:#fff;
+  border:none;border-radius:50%;width:26px;height:26px;font-size:14px;cursor:pointer;z-index:2}
+#bcStatus{font-size:13px;margin-top:10px;color:var(--muted);min-height:18px}
+#bcStatus .code{font-family:ui-monospace,monospace;background:var(--bg);border:1px solid var(--line);
+  border-radius:6px;padding:2px 6px}
+.manualbc{display:flex;gap:8px;margin-top:10px}
+.manualbc input{flex:1;padding:10px 12px;border-radius:10px;border:1px solid var(--line);
+  background:var(--bg);font-size:16px;min-width:0}
+.btn{border:none;border-radius:10px;padding:10px 16px;font-weight:600;cursor:pointer;
+  background:var(--text);color:var(--bg);font-size:15px}
+.btn.sm{padding:8px 12px;font-size:13px}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+.btn.danger{background:var(--bad);color:#fff}
+.btn:disabled{opacity:.5;cursor:default}
+.verdict{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.vbtn{border:2px solid var(--line);background:var(--card);border-radius:var(--radius);
+  padding:16px;font-size:17px;font-weight:700;cursor:pointer;color:var(--muted)}
+.vbtn.good.on{border-color:var(--good);background:var(--good-bg);color:var(--good)}
+.vbtn.bad.on{border-color:var(--bad);background:var(--bad-bg);color:var(--bad)}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px}
+.field input,.field textarea,.field select{width:100%;padding:11px 12px;border-radius:10px;
+  border:1px solid var(--line);background:var(--bg);font-size:16px}
+.field textarea{min-height:72px;resize:vertical}
+.nutgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}
+.nutgrid .field{margin-bottom:0}
+.savebar{display:flex;gap:10px;margin-top:4px}
+.savebar .btn{flex:1;padding:14px;font-size:16px}
+.hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+.hint code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 4px}
+
+/* ---- settings ---- */
+.stack{display:flex;flex-direction:column;gap:10px}
+
+/* ---- detail sheet ---- */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;opacity:0;
+  pointer-events:none;transition:opacity .18s}
+#overlay.open{opacity:1;pointer-events:auto}
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--card);
+  border-radius:20px 20px 0 0;max-height:88vh;overflow-y:auto;transform:translateY(105%);
+  transition:transform .22s ease-out;max-width:860px;margin:0 auto;
+  padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+#sheet.open{transform:translateY(0)}
+#sheet .grab{width:44px;height:5px;border-radius:3px;background:var(--line);margin:10px auto 4px}
+#sheetBody{padding:8px 16px 16px}
+.dimg{width:100%;max-height:320px;object-fit:contain;border-radius:12px;background:var(--bg)}
+.dtitle{font-size:20px;font-weight:700;margin:12px 0 2px}
+.dbrand{color:var(--muted);font-size:14px;margin-bottom:10px}
+.dtoggles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.nutritable{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px}
+.nutritable td{padding:7px 4px;border-bottom:1px solid var(--line)}
+.nutritable td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.dnotes{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  font-size:14px;white-space:pre-wrap;margin-top:6px}
+.dmeta{font-size:12px;color:var(--muted);margin-top:10px}
+.drow{display:flex;gap:10px;margin-top:14px}
+.drow .btn{flex:1}
+.scorebadges{display:flex;gap:8px;margin-top:4px}
+.scorepill{border-radius:8px;color:#fff;font-weight:800;padding:4px 10px;font-size:13px;text-transform:uppercase}
+
+/* ---- bottom nav ---- */
+nav{position:fixed;bottom:0;left:0;right:0;z-index:30;background:var(--card);
+  border-top:1px solid var(--line);display:flex;height:calc(var(--nav-h) + env(safe-area-inset-bottom));
+  padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:none;background:none;cursor:pointer;color:var(--muted);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px}
+nav button .nico{font-size:22px}
+nav button.on{color:var(--accent);font-weight:600}
+nav button.addbig .nico{background:var(--accent);color:#fff;width:44px;height:44px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:26px;margin-top:-4px}
+
+#toast{position:fixed;bottom:calc(var(--nav-h) + 18px + env(safe-area-inset-bottom));
+  left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);
+  padding:10px 18px;border-radius:999px;font-size:14px;opacity:0;transition:.2s;z-index:60;
+  max-width:88vw;text-align:center;pointer-events:none}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;
+  border-top-color:transparent;border-radius:50%;animation:rot .7s linear infinite;vertical-align:-2px}
+@keyframes rot{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="logo">🛒</span> FoodCheck</h1>
+  <button id="syncBtn" title="Sync now"><span id="syncDot"></span><span id="syncLbl">Sync</span></button>
+</header>
+
+<main>
+  <!-- ============ LIST ============ -->
+  <section id="view-list">
+    <div class="searchrow">
+      <input id="searchBox" type="search" placeholder="Search name, brand, notes, barcode…" autocomplete="off">
+      <select id="sortSel">
+        <option value="new">Newest</option>
+        <option value="az">A–Z</option>
+      </select>
+    </div>
+    <div class="chips" id="statusChips">
+      <button class="chip on" data-f="all">All</button>
+      <button class="chip good" data-f="good">✓ Good</button>
+      <button class="chip bad" data-f="bad">✕ Bad</button>
+    </div>
+    <div id="countLine"></div>
+    <div id="cards"></div>
+  </section>
+
+  <!-- ============ ADD / EDIT ============ -->
+  <section id="view-add" hidden>
+    <div class="formcard">
+      <h3>Photos</h3>
+      <div class="photobtns">
+        <div class="photobtn" id="pkgBtn">
+          <span class="ico">📦</span><span class="lb">Package photo</span>
+          <span class="sub">front of product</span>
+        </div>
+        <div class="photobtn" id="bcBtn">
+          <span class="ico">🏷️</span><span class="lb">Barcode photo</span>
+          <span class="sub">auto-fills nutrition</span>
+        </div>
+      </div>
+      <input type="file" accept="image/*" capture="environment" id="pkgInput" hidden>
+      <input type="file" accept="image/*" capture="environment" id="bcInput" hidden>
+      <div id="bcStatus"></div>
+      <div class="manualbc">
+        <input id="manualBc" type="text" inputmode="numeric" placeholder="…or type barcode number">
+        <button class="btn sm" id="manualBcGo">Look up</button>
+      </div>
+    </div>
+
+    <div class="formcard">
+      <h3>Verdict</h3>
+      <div class="verdict">
+        <button class="vbtn good" id="vGood">✓ Good — buy again</button>
+        <button class="vbtn bad" id="vBad">✕ Bad — never again</button>
+      </div>
+    </div>
+
+    <div class="formcard">
+      <h3>Details</h3>
+      <div class="field"><label>Name *</label><input id="fName" placeholder="e.g. Peanut Butter Crunchy"></div>
+      <div class="field"><label>Brand</label><input id="fBrand"></div>
+      <div class="field"><label>Category</label><input id="fCat" list="catList" placeholder="e.g. Snacks"><datalist id="catList"></datalist></div>
+      <div class="field"><label>Notes</label><textarea id="fNotes" placeholder="Why good/bad? Taste, price, where you bought it…"></textarea></div>
+    </div>
+
+    <div class="formcard">
+      <h3>Nutrition (per 100 g)</h3>
+      <div class="nutgrid">
+        <div class="field"><label>Calories (kcal)</label><input id="nKcal" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Fat (g)</label><input id="nFat" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Saturated fat (g)</label><input id="nSatfat" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Carbs (g)</label><input id="nCarbs" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Sugars (g)</label><input id="nSugars" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Fiber (g)</label><input id="nFiber" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Protein (g)</label><input id="nProtein" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Salt (g)</label><input id="nSalt" type="number" step="any" inputmode="decimal"></div>
+      </div>
+      <div class="hint" id="offHint"></div>
+    </div>
+
+    <div class="savebar">
+      <button class="btn ghost" id="cancelBtn">Cancel</button>
+      <button class="btn" id="saveBtn">Save item</button>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section id="view-settings" hidden>
+    <div class="formcard">
+      <h3>GitHub sync (cross-device)</h3>
+      <div class="stack">
+        <div class="field"><label>Data repo (owner/name — private repo recommended)</label>
+          <input id="sRepo" placeholder="youruser/foodcheck-data" autocapitalize="off" autocomplete="off"></div>
+        <div class="field"><label>Fine-grained token (Contents: read &amp; write on that repo)</label>
+          <input id="sToken" type="password" placeholder="github_pat_…" autocomplete="off"></div>
+        <div class="field"><label>Branch</label><input id="sBranch" value="main" autocapitalize="off"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn sm" id="sSave">Save &amp; test</button>
+          <button class="btn sm ghost" id="sCacheImgs">Download all images</button>
+        </div>
+        <div class="hint">Token is stored only in this browser. Set it up once per device. Each device pulls/merges/pushes <code>data/items.json</code> + photos in your repo automatically.</div>
+        <div class="hint" id="sStatus"></div>
+      </div>
+    </div>
+    <div class="formcard">
+      <h3>Backup</h3>
+      <div style="display:flex;gap:8px">
+        <button class="btn sm ghost" id="expBtn">Export JSON</button>
+        <button class="btn sm ghost" id="impBtn">Import JSON</button>
+        <input type="file" accept="application/json,.json" id="impInput" hidden>
+      </div>
+      <div class="hint">Export includes photos. Use it to move data between devices manually if you don't set up sync.</div>
+    </div>
+    <div class="formcard">
+      <h3>About</h3>
+      <div class="hint" id="statsLine"></div>
+      <div class="hint">FoodCheck — personal good/bad grocery database. Nutrition data via Open Food Facts.</div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ DETAIL SHEET ============ -->
+<div id="overlay"></div>
+<div id="sheet"><div class="grab"></div><div id="sheetBody"></div></div>
+
+<nav>
+  <button id="navList" class="on"><span class="nico">📋</span>List</button>
+  <button id="navAdd" class="addbig"><span class="nico">＋</span>Add</button>
+  <button id="navSettings"><span class="nico">⚙️</span>Settings</button>
+</nav>
+
+<div id="toast"></div>
+<script>
+/* =================================================================
+   FoodCheck — single-file grocery good/bad database
+   Storage: IndexedDB (items + full-size images) per device
+   Sync:    optional GitHub repo (data/items.json + data/images/*)
+   ================================================================= */
+'use strict';
+
+/* ---------------- utils ---------------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID()
+  : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+const num = v => (v === undefined || v === null || v === '' || isNaN(+v)) ? null : +v;
+const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+
+let toastT;
+function toast(msg, ms = 2600) {
+  const el = $('#toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function blobToDataURL(blob) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob);
+  });
+}
+function blobToB64(blob) { return blobToDataURL(blob).then(u => u.split(',')[1]); }
+function b64EncodeUnicode(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = ''; const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH)
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  return btoa(bin);
+}
+function dataURLtoBlob(u) {
+  const [h, b64] = u.split(','); const mime = (h.match(/data:(.*?)[;,]/) || [])[1] || 'image/jpeg';
+  const bin = atob(b64); const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+async function fileToImage(fileOrBlob) {
+  if (window.createImageBitmap) {
+    try { return await createImageBitmap(fileOrBlob, { imageOrientation: 'from-image' }); }
+    catch (e) { try { return await createImageBitmap(fileOrBlob); } catch (e2) {} }
+  }
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(fileOrBlob); const img = new Image();
+    img.onload = () => res(img); img.onerror = rej; img.src = url;
+  });
+}
+function drawScaled(img, maxW, rotDeg = 0) {
+  const iw = img.width, ih = img.height;
+  const sc = Math.min(1, maxW / iw);
+  const w = Math.round(iw * sc), h = Math.round(ih * sc);
+  const c = document.createElement('canvas');
+  if (rotDeg === 90 || rotDeg === 270) { c.width = h; c.height = w; } else { c.width = w; c.height = h; }
+  const ctx = c.getContext('2d');
+  ctx.translate(c.width / 2, c.height / 2);
+  ctx.rotate(rotDeg * Math.PI / 180);
+  ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  return c;
+}
+/* full-size blob (max 1000px) + small thumb dataURL (max 240px) */
+async function compressPhoto(file) {
+  const img = await fileToImage(file);
+  const full = drawScaled(img, 1000);
+  const th = drawScaled(img, 240);
+  const fullBlob = await new Promise(r => full.toBlob(r, 'image/jpeg', 0.72));
+  const thumb = th.toDataURL('image/jpeg', 0.55);
+  return { fullBlob, thumb };
+}
+
+/* ---------------- IndexedDB ---------------- */
+const DB_NAME = 'foodcheck', DB_VER = 1;
+let db;
+function openDB() {
+  return new Promise((res, rej) => {
+    const rq = indexedDB.open(DB_NAME, DB_VER);
+    rq.onupgradeneeded = () => {
+      const d = rq.result;
+      if (!d.objectStoreNames.contains('items')) d.createObjectStore('items', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('images')) d.createObjectStore('images');
+      if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta');
+    };
+    rq.onsuccess = () => { db = rq.result; res(db); };
+    rq.onerror = () => rej(rq.error);
+  });
+}
+function idb(store, mode, fn) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, mode);
+    const rq = fn(tx.objectStore(store));
+    tx.oncomplete = () => res(rq && rq.result);
+    tx.onerror = () => rej(tx.error);
+  });
+}
+const dbAllItems  = () => idb('items', 'readonly',  s => s.getAll());
+const dbPutItem   = it => idb('items', 'readwrite', s => s.put(it));
+const dbPutImage  = (id, blob) => idb('images', 'readwrite', s => s.put(blob, id));
+const dbGetImage  = id => idb('images', 'readonly', s => s.get(id));
+const dbDelImage  = id => idb('images', 'readwrite', s => s.delete(id));
+const dbGetMeta   = k => idb('meta', 'readonly',  s => s.get(k));
+const dbSetMeta   = (k, v) => idb('meta', 'readwrite', s => s.put(v, k));
+
+/* ---------------- state ---------------- */
+let items = [];
+let settings = { repo: '', token: '', branch: 'main' };
+let imgDirty = new Set();
+let filter = 'all', sortMode = 'new', searchQ = '';
+let editingId = null;
+let draft = null;
+let syncing = false;
+
+const live = () => items.filter(i => !i.deletedAt);
+
+/* ---------------- merge (sync core) ---------------- */
+function mergeItems(local, remote) {
+  const map = new Map();
+  for (const r of remote) map.set(r.id, r);
+  let localAhead = false, remoteApplied = false;
+  const localIds = new Set(local.map(l => l.id));
+  for (const l of local) {
+    const r = map.get(l.id);
+    if (!r) { map.set(l.id, l); localAhead = true; }
+    else if ((l.updatedAt || 0) > (r.updatedAt || 0)) { map.set(l.id, l); localAhead = true; }
+    else if ((r.updatedAt || 0) > (l.updatedAt || 0)) { remoteApplied = true; }
+  }
+  for (const r of remote) if (!localIds.has(r.id)) remoteApplied = true;
+  return { merged: [...map.values()], localAhead, remoteApplied };
+}
+
+/* ---------------- views / router ---------------- */
+const views = { list: '#view-list', add: '#view-add', settings: '#view-settings' };
+function showView(name) {
+  for (const [k, sel] of Object.entries(views)) $(sel).hidden = (k !== name);
+  $('#navList').classList.toggle('on', name === 'list');
+  $('#navAdd').classList.toggle('on', name === 'add');
+  $('#navSettings').classList.toggle('on', name === 'settings');
+  window.scrollTo(0, 0);
+  if (name === 'list') renderList();
+  if (name === 'settings') renderSettings();
+}
+
+/* ---------------- list rendering ---------------- */
+const NS_COLORS = { a: '#038141', b: '#85bb2f', c: '#fecb02', d: '#ee8100', e: '#e63e11' };
+
+function matches(it, q) {
+  if (!q) return true;
+  const hay = [it.name, it.brand, it.notes, it.barcode, it.category].join(' ').toLowerCase();
+  return q.toLowerCase().split(/\s+/).every(w => hay.includes(w));
+}
+function renderList() {
+  let list = live().filter(i => (filter === 'all' || i.status === filter) && matches(i, searchQ));
+  list.sort(sortMode === 'az'
+    ? (a, b) => (a.name || '').localeCompare(b.name || '')
+    : (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+  const g = live().filter(i => i.status === 'good').length;
+  const b = live().filter(i => i.status === 'bad').length;
+  $('#countLine').textContent = `${list.length} shown · ${g} good · ${b} bad`;
+
+  const wrap = $('#cards');
+  if (!list.length) {
+    wrap.innerHTML = `<div class="empty" style="grid-column:1/-1">${
+      live().length ? 'No items match.' :
+      'No items yet.<br>Tap <b>＋ Add</b>, snap a photo, mark it good or bad.'}</div>`;
+    return;
+  }
+  wrap.innerHTML = list.map(it => `
+    <div class="card" data-id="${esc(it.id)}">
+      ${it.thumb ? `<img class="ph" src="${it.thumb}" alt="" loading="lazy">`
+                 : `<div class="noph">${it.status === 'bad' ? '✕' : '🛒'}</div>`}
+      <span class="badge ${it.status}">${it.status === 'good' ? '✓ GOOD' : '✕ BAD'}</span>
+      ${it.nutriscore && NS_COLORS[it.nutriscore] ?
+        `<span class="nscore" style="background:${NS_COLORS[it.nutriscore]}">${esc(it.nutriscore)}</span>` : ''}
+      <div class="info">
+        <div class="nm">${esc(it.name) || '(no name)'}</div>
+        ${it.brand ? `<div class="br">${esc(it.brand)}</div>` : ''}
+      </div>
+    </div>`).join('');
+  wrap.querySelectorAll('.card').forEach(c =>
+    c.addEventListener('click', () => openDetail(c.dataset.id)));
+}
+
+/* ---------------- detail sheet ---------------- */
+const NUT_ROWS = [
+  ['kcal', 'Calories', 'kcal'], ['fat', 'Fat', 'g'], ['satfat', '— saturated', 'g'],
+  ['carbs', 'Carbs', 'g'], ['sugars', '— sugars', 'g'], ['fiber', 'Fiber', 'g'],
+  ['protein', 'Protein', 'g'], ['salt', 'Salt', 'g']];
+
+async function openDetail(id) {
+  const it = items.find(i => i.id === id);
+  if (!it) return;
+  const n = it.nutrition || {};
+  const nutRows = NUT_ROWS.filter(([k]) => n[k] !== null && n[k] !== undefined)
+    .map(([k, lb, u]) => `<tr><td>${lb}</td><td>${n[k]} ${u}</td></tr>`).join('');
+  $('#sheetBody').innerHTML = `
+    <div id="dImgWrap"></div>
+    <div class="dtitle">${esc(it.name) || '(no name)'}</div>
+    <div class="dbrand">${esc([it.brand, it.category, it.quantity].filter(Boolean).join(' · '))}</div>
+    <div class="scorebadges">
+      ${it.nutriscore && NS_COLORS[it.nutriscore] ? `<span class="scorepill" style="background:${NS_COLORS[it.nutriscore]}">Nutri-Score ${esc(it.nutriscore)}</span>` : ''}
+      ${it.nova ? `<span class="scorepill" style="background:#6b7280">NOVA ${esc(it.nova)}</span>` : ''}
+    </div>
+    <div class="dtoggles">
+      <button class="vbtn good ${it.status === 'good' ? 'on' : ''}" id="dGood">✓ Good</button>
+      <button class="vbtn bad ${it.status === 'bad' ? 'on' : ''}" id="dBad">✕ Bad</button>
+    </div>
+    ${it.notes ? `<div class="dnotes">${esc(it.notes)}</div>` : ''}
+    ${nutRows ? `<table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
+    <div class="dmeta">${it.barcode ? 'Barcode ' + esc(it.barcode) + ' · ' : ''}Added ${new Date(it.createdAt).toLocaleDateString()}</div>
+    <div class="drow">
+      <button class="btn ghost" id="dEdit">Edit</button>
+      <button class="btn danger" id="dDelete">Delete</button>
+    </div>`;
+  $('#overlay').classList.add('open'); $('#sheet').classList.add('open');
+
+  const wrap = $('#dImgWrap');
+  const blob = await dbGetImage(it.id).catch(() => null);
+  if (blob) wrap.innerHTML = `<img class="dimg" src="${URL.createObjectURL(blob)}" alt="">`;
+  else if (it.thumb) wrap.innerHTML = `<img class="dimg" src="${it.thumb}" alt="">`;
+  if (!blob && it.hasImage && settings.token && navigator.onLine) {
+    fetchRemoteImage(it.id).then(b2 => {
+      if (b2 && $('#sheet').classList.contains('open'))
+        wrap.innerHTML = `<img class="dimg" src="${URL.createObjectURL(b2)}" alt="">`;
+    }).catch(() => {});
+  }
+
+  $('#dGood').onclick = () => setStatus(it.id, 'good');
+  $('#dBad').onclick = () => setStatus(it.id, 'bad');
+  $('#dEdit').onclick = () => { closeSheet(); startEdit(it.id); };
+  $('#dDelete').onclick = async () => {
+    if (!confirm(`Delete "${it.name || 'item'}"?`)) return;
+    it.deletedAt = Date.now(); it.updatedAt = Date.now();
+    await dbPutItem(clean(it)); await dbDelImage(it.id).catch(() => {});
+    closeSheet(); renderList(); toast('Deleted'); queueSync();
+  };
+}
+function closeSheet() { $('#overlay').classList.remove('open'); $('#sheet').classList.remove('open'); }
+async function setStatus(id, st) {
+  const it = items.find(i => i.id === id); if (!it) return;
+  it.status = st; it.updatedAt = Date.now();
+  await dbPutItem(clean(it));
+  openDetail(id); renderList(); queueSync();
+}
+function clean(it) { const o = { ...it }; for (const k of Object.keys(o)) if (k[0] === '_') delete o[k]; return o; }
+
+/* ---------------- barcode decode ---------------- */
+let zxingP = null;
+function loadZXing() {
+  if (window.ZXing) return Promise.resolve();
+  if (!zxingP) zxingP = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+    s.onload = res; s.onerror = () => { zxingP = null; rej(new Error('ZXing failed to load')); };
+    document.head.appendChild(s);
+  });
+  return zxingP;
+}
+async function decodeBarcodeFile(file) {
+  // 1) native BarcodeDetector (Chrome/Android — fast & robust)
+  try {
+    if ('BarcodeDetector' in window) {
+      const det = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'] });
+      const img = await fileToImage(file);
+      for (const rot of [0, 90]) {
+        const codes = await det.detect(drawScaled(img, 1400, rot));
+        if (codes && codes.length) return codes[0].rawValue;
+      }
+    }
+  } catch (e) {}
+  // 2) ZXing fallback (Safari/Firefox)
+  try {
+    await loadZXing();
+    const img = await fileToImage(file);
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    const reader = new ZXing.MultiFormatReader();
+    reader.setHints(hints);
+    for (const w of [1000, 1600]) for (const rot of [0, 90]) {
+      try {
+        const canvas = drawScaled(img, w, rot);
+        const lum = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+        const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+        const r = reader.decode(bmp);
+        if (r && r.getText()) return r.getText();
+      } catch (e) {} finally { reader.reset(); }
+    }
+  } catch (e) {}
+  return null;
+}
+
+/* ---------------- Open Food Facts ---------------- */
+async function lookupBarcode(code) {
+  const fields = 'product_name,brands,nutriments,nutriscore_grade,nova_group,image_front_small_url,image_front_url,categories,quantity';
+  const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${fields}`);
+  if (!r.ok) return null;
+  const j = await r.json();
+  if (j.status !== 1 || !j.product) return null;
+  const p = j.product, n = p.nutriments || {};
+  const cats = (p.categories || '').split(',').map(s => s.trim()).filter(Boolean);
+  return {
+    name: p.product_name || '', brand: p.brands || '',
+    category: cats.length ? cats[cats.length - 1] : '', quantity: p.quantity || '',
+    nutriscore: (p.nutriscore_grade || '').toLowerCase(), nova: p.nova_group || null,
+    image: p.image_front_small_url || p.image_front_url || '',
+    nutrition: {
+      kcal: num(n['energy-kcal_100g']), fat: num(n.fat_100g), satfat: num(n['saturated-fat_100g']),
+      carbs: num(n.carbohydrates_100g), sugars: num(n.sugars_100g), fiber: num(n.fiber_100g),
+      protein: num(n.proteins_100g), salt: num(n.salt_100g)
+    }
+  };
+}
+
+/* ---------------- add / edit form ---------------- */
+function resetForm() {
+  editingId = null;
+  draft = { status: null, barcode: '', photoBlob: null, thumb: '', off: null };
+  ['#fName', '#fBrand', '#fCat', '#fNotes', '#manualBc',
+   '#nKcal', '#nFat', '#nSatfat', '#nCarbs', '#nSugars', '#nFiber', '#nProtein', '#nSalt']
+    .forEach(s => { const el = $(s); if (el) el.value = ''; });
+  $('#vGood').classList.remove('on'); $('#vBad').classList.remove('on');
+  $('#bcStatus').innerHTML = ''; $('#offHint').textContent = '';
+  setPhotoPreview('pkg', null); setPhotoPreview('bc', null);
+  $('#saveBtn').textContent = 'Save item';
+}
+function setPhotoPreview(which, dataURL) {
+  const btn = which === 'pkg' ? $('#pkgBtn') : $('#bcBtn');
+  btn.querySelectorAll('img.prev,.clear').forEach(e => e.remove());
+  if (dataURL) {
+    const img = document.createElement('img'); img.className = 'prev'; img.src = dataURL;
+    const x = document.createElement('button'); x.className = 'clear'; x.textContent = '✕';
+    x.onclick = ev => { ev.stopPropagation();
+      if (which === 'pkg') { draft.photoBlob = null; draft.thumb = ''; }
+      setPhotoPreview(which, null);
+    };
+    btn.append(img, x);
+  }
+}
+function fillNutrition(nu) {
+  const m = { kcal: '#nKcal', fat: '#nFat', satfat: '#nSatfat', carbs: '#nCarbs',
+              sugars: '#nSugars', fiber: '#nFiber', protein: '#nProtein', salt: '#nSalt' };
+  for (const [k, sel] of Object.entries(m)) $(sel).value = (nu && nu[k] != null) ? nu[k] : '';
+}
+async function applyLookup(code) {
+  draft.barcode = code;
+  $('#bcStatus').innerHTML = `<span class="code">${esc(code)}</span> <span class="spin"></span> looking up…`;
+  try {
+    const off = await lookupBarcode(code);
+    if (off) {
+      draft.off = off;
+      if (!$('#fName').value) $('#fName').value = off.name;
+      if (!$('#fBrand').value) $('#fBrand').value = off.brand;
+      if (!$('#fCat').value) $('#fCat').value = off.category;
+      fillNutrition(off.nutrition);
+      $('#bcStatus').innerHTML = `<span class="code">${esc(code)}</span> ✓ found: <b>${esc(off.name || 'unnamed product')}</b>`;
+      $('#offHint').textContent = 'Auto-filled from Open Food Facts — edit anything that looks off.';
+      if (!draft.photoBlob && !draft.thumb && off.image) {
+        try {
+          const r = await fetch(off.image);
+          if (r.ok) {
+            const { fullBlob, thumb } = await compressPhoto(await r.blob());
+            draft.photoBlob = fullBlob; draft.thumb = thumb;
+            setPhotoPreview('pkg', thumb);
+          }
+        } catch (e) {}
+      }
+    } else {
+      $('#bcStatus').innerHTML = `<span class="code">${esc(code)}</span> — not in Open Food Facts. Enter details manually.`;
+    }
+  } catch (e) {
+    $('#bcStatus').innerHTML = `<span class="code">${esc(code)}</span> — lookup failed (offline?). Barcode saved; enter details manually.`;
+  }
+}
+function startAdd() { resetForm(); showView('add'); }
+function startEdit(id) {
+  const it = items.find(i => i.id === id); if (!it) return;
+  resetForm();
+  editingId = id;
+  draft.status = it.status; draft.barcode = it.barcode || ''; draft.thumb = it.thumb || '';
+  $('#fName').value = it.name || ''; $('#fBrand').value = it.brand || '';
+  $('#fCat').value = it.category || ''; $('#fNotes').value = it.notes || '';
+  fillNutrition(it.nutrition);
+  $('#vGood').classList.toggle('on', it.status === 'good');
+  $('#vBad').classList.toggle('on', it.status === 'bad');
+  if (it.barcode) $('#bcStatus').innerHTML = `<span class="code">${esc(it.barcode)}</span>`;
+  if (it.thumb) setPhotoPreview('pkg', it.thumb);
+  $('#saveBtn').textContent = 'Save changes';
+  showView('add');
+}
+async function saveForm() {
+  const name = $('#fName').value.trim();
+  if (!draft.status) { toast('Pick Good or Bad'); return; }
+  if (!name && !draft.thumb) { toast('Add a name or a photo'); return; }
+  const now = Date.now();
+  const wasEditing = !!editingId;
+  const nutrition = {
+    kcal: num($('#nKcal').value), fat: num($('#nFat').value), satfat: num($('#nSatfat').value),
+    carbs: num($('#nCarbs').value), sugars: num($('#nSugars').value), fiber: num($('#nFiber').value),
+    protein: num($('#nProtein').value), salt: num($('#nSalt').value)
+  };
+  let it;
+  if (wasEditing) {
+    it = items.find(i => i.id === editingId);
+  }
+  if (!it) {
+    it = { id: uid(), createdAt: now, hasImage: false };
+    items.push(it);
+  }
+  Object.assign(it, {
+    name, status: draft.status, barcode: draft.barcode,
+    brand: $('#fBrand').value.trim(), category: $('#fCat').value.trim(),
+    notes: $('#fNotes').value.trim(), nutrition,
+    nutriscore: draft.off ? draft.off.nutriscore : (it.nutriscore || ''),
+    nova: draft.off ? draft.off.nova : (it.nova || null),
+    quantity: draft.off ? draft.off.quantity : (it.quantity || ''),
+    thumb: draft.thumb || it.thumb || '', updatedAt: now
+  });
+  if (draft.photoBlob) {
+    await dbPutImage(it.id, draft.photoBlob);
+    it.hasImage = true;
+    imgDirty.add(it.id); await dbSetMeta('imgDirty', [...imgDirty]);
+  }
+  await dbPutItem(clean(it));
+  toast(wasEditing ? 'Updated' : (draft.status === 'good' ? 'Added to whitelist ✓' : 'Added to blacklist ✕'));
+  resetForm(); showView('list'); queueSync();
+}
+
+/* ---------------- GitHub sync ---------------- */
+const GH = 'https://api.github.com';
+const DATA_PATH = 'data/items.json';
+const IMG_DIR = 'data/images';
+
+function ghConfigured() { return !!(settings.token && settings.repo && settings.repo.includes('/')); }
+function ghHeaders(extra) {
+  return Object.assign({
+    'Authorization': 'Bearer ' + settings.token,
+    'Accept': 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28'
+  }, extra || {});
+}
+async function ghGetRawText(path) {
+  const r = await fetch(`${GH}/repos/${settings.repo}/contents/${path}?ref=${encodeURIComponent(settings.branch)}&_=${Date.now()}`,
+    { headers: ghHeaders({ Accept: 'application/vnd.github.raw+json' }), cache: 'no-store' });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error('GitHub ' + r.status + (r.status === 401 ? ' (bad token?)' : ''));
+  return r.text();
+}
+async function ghGetRawBlob(path) {
+  const r = await fetch(`${GH}/repos/${settings.repo}/contents/${path}?ref=${encodeURIComponent(settings.branch)}&_=${Date.now()}`,
+    { headers: ghHeaders({ Accept: 'application/vnd.github.raw+json' }), cache: 'no-store' });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error('GitHub ' + r.status);
+  return r.blob();
+}
+async function ghListDir(path) {
+  const r = await fetch(`${GH}/repos/${settings.repo}/contents/${path}?ref=${encodeURIComponent(settings.branch)}&_=${Date.now()}`,
+    { headers: ghHeaders(), cache: 'no-store' });
+  if (r.status === 404) return [];
+  if (!r.ok) throw new Error('GitHub ' + r.status);
+  const j = await r.json();
+  return Array.isArray(j) ? j : [];
+}
+async function ghPut(path, base64, sha, msg) {
+  const body = { message: msg, content: base64, branch: settings.branch };
+  if (sha) body.sha = sha;
+  const r = await fetch(`${GH}/repos/${settings.repo}/contents/${path}`,
+    { method: 'PUT', headers: ghHeaders(), body: JSON.stringify(body) });
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    throw new Error('GitHub PUT ' + r.status + (t.includes('sha') ? ' (conflict — retry sync)' : ''));
+  }
+  return r.json();
+}
+async function fetchRemoteImage(id) {
+  const blob = await ghGetRawBlob(`${IMG_DIR}/${id}.jpg`);
+  if (blob) await dbPutImage(id, blob);
+  return blob;
+}
+
+function setSyncUI(state, label) {
+  const dot = $('#syncDot');
+  dot.classList.remove('ok', 'err', 'busy');
+  if (state) dot.classList.add(state);
+  $('#syncLbl').textContent = label || 'Sync';
+}
+const queueSync = debounce(() => syncNow(true), 3000);
+
+async function syncNow(auto) {
+  if (!ghConfigured()) { if (!auto) { toast('Set up GitHub sync in Settings'); showView('settings'); } return; }
+  if (!navigator.onLine) { if (!auto) toast('Offline — will sync when back online'); return; }
+  if (syncing) return;
+  syncing = true; setSyncUI('busy', 'Syncing…');
+  try {
+    // 1) pull remote
+    let remote = [];
+    const txt = await ghGetRawText(DATA_PATH);
+    if (txt) { try { remote = (JSON.parse(txt).items) || []; } catch (e) { throw new Error('items.json corrupt'); } }
+    // 2) merge
+    const { merged, localAhead, remoteApplied } = mergeItems(items, remote);
+    items = merged;
+    if (remoteApplied) { for (const it of merged) await dbPutItem(clean(it)); }
+    // 3) push items.json if local has newer/extra data
+    if (localAhead || (!txt && items.length)) {
+      let sha = null;
+      const dir = await ghListDir('data');
+      const f = dir.find(e => e.name === 'items.json'); if (f) sha = f.sha;
+      const payload = JSON.stringify({ version: 1, updatedAt: Date.now(), items: items.map(clean) });
+      await ghPut(DATA_PATH, b64EncodeUnicode(payload), sha, 'FoodCheck: update items');
+    }
+    // 4) push dirty images
+    if (imgDirty.size) {
+      const dir = await ghListDir(IMG_DIR);
+      const shaMap = new Map(dir.map(e => [e.name, e.sha]));
+      for (const id of [...imgDirty]) {
+        const it = items.find(i => i.id === id);
+        if (!it || it.deletedAt) { imgDirty.delete(id); continue; }
+        const blob = await dbGetImage(id).catch(() => null);
+        if (blob) await ghPut(`${IMG_DIR}/${id}.jpg`, await blobToB64(blob), shaMap.get(id + '.jpg'), 'FoodCheck: photo');
+        imgDirty.delete(id);
+      }
+      await dbSetMeta('imgDirty', [...imgDirty]);
+    }
+    await dbSetMeta('lastSync', Date.now());
+    setSyncUI('ok', 'Synced');
+    if (!auto) toast('Synced ✓');
+    renderList();
+  } catch (e) {
+    setSyncUI('err', 'Sync error');
+    if (!auto) toast('Sync failed: ' + e.message, 4000);
+  } finally {
+    syncing = false;
+  }
+}
+
+/* ---------------- settings ---------------- */
+function renderSettings() {
+  $('#sRepo').value = settings.repo; $('#sToken').value = settings.token; $('#sBranch').value = settings.branch || 'main';
+  const g = live().filter(i => i.status === 'good').length;
+  const b = live().filter(i => i.status === 'bad').length;
+  $('#statsLine').textContent = `${live().length} items (${g} good, ${b} bad) stored on this device.`;
+  dbGetMeta('lastSync').then(t => {
+    $('#sStatus').textContent = t ? 'Last sync: ' + new Date(t).toLocaleString() : (ghConfigured() ? '' : 'Sync not configured.');
+  }).catch(() => {});
+}
+async function saveSettings() {
+  settings.repo = $('#sRepo').value.trim().replace(/^https:\/\/github\.com\//, '').replace(/\/$/, '');
+  settings.token = $('#sToken').value.trim();
+  settings.branch = $('#sBranch').value.trim() || 'main';
+  await dbSetMeta('settings', { ...settings });
+  if (!ghConfigured()) { toast('Enter repo (owner/name) and token'); return; }
+  $('#sStatus').textContent = 'Testing connection…';
+  try {
+    const r = await fetch(`${GH}/repos/${settings.repo}`, { headers: ghHeaders(), cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status === 404 ? 'repo not found (check name / token access)' : 'HTTP ' + r.status);
+    $('#sStatus').textContent = '✓ Connected to ' + settings.repo;
+    toast('Connected — syncing…'); syncNow(true);
+  } catch (e) {
+    $('#sStatus').textContent = '✕ ' + e.message;
+    toast('Connection failed', 3000);
+  }
+}
+async function cacheAllImages() {
+  if (!ghConfigured()) { toast('Set up sync first'); return; }
+  const targets = live().filter(i => i.hasImage);
+  let n = 0;
+  toast('Downloading images…');
+  for (const it of targets) {
+    const has = await dbGetImage(it.id).catch(() => null);
+    if (!has) { try { await fetchRemoteImage(it.id); n++; } catch (e) {} }
+  }
+  toast(`Images cached (${n} downloaded)`);
+}
+
+/* ---------------- export / import ---------------- */
+async function exportJSON() {
+  const out = { version: 1, exportedAt: new Date().toISOString(), items: [] };
+  for (const it of items) {
+    const o = clean(it);
+    const blob = await dbGetImage(it.id).catch(() => null);
+    if (blob) o._image = await blobToDataURL(blob);
+    out.items.push(o);
+  }
+  const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `foodcheck-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  toast('Exported');
+}
+async function importJSON(file) {
+  try {
+    const j = JSON.parse(await file.text());
+    if (!Array.isArray(j.items)) throw new Error('bad file');
+    let n = 0;
+    for (const raw of j.items) {
+      const img = raw._image; delete raw._image;
+      const existing = items.find(i => i.id === raw.id);
+      if (!existing || (raw.updatedAt || 0) > (existing.updatedAt || 0)) {
+        if (existing) Object.assign(existing, raw); else items.push(raw);
+        await dbPutItem(clean(raw));
+        if (img) { await dbPutImage(raw.id, dataURLtoBlob(img)); imgDirty.add(raw.id); }
+        n++;
+      }
+    }
+    await dbSetMeta('imgDirty', [...imgDirty]);
+    renderList(); renderSettings();
+    toast(`Imported ${n} item${n === 1 ? '' : 's'}`); queueSync();
+  } catch (e) { toast('Import failed: ' + e.message, 3500); }
+}
+
+/* ---------------- events ---------------- */
+function bindEvents() {
+  $('#navList').onclick = () => showView('list');
+  $('#navAdd').onclick = startAdd;
+  $('#navSettings').onclick = () => showView('settings');
+  $('#syncBtn').onclick = () => syncNow(false);
+  $('#overlay').onclick = closeSheet;
+
+  $('#searchBox').addEventListener('input', debounce(e => { searchQ = e.target.value.trim(); renderList(); }, 150));
+  $('#sortSel').onchange = e => { sortMode = e.target.value; renderList(); };
+  document.querySelectorAll('#statusChips .chip').forEach(ch => ch.onclick = () => {
+    filter = ch.dataset.f;
+    document.querySelectorAll('#statusChips .chip').forEach(c => c.classList.toggle('on', c === ch));
+    renderList();
+  });
+
+  $('#pkgBtn').onclick = () => $('#pkgInput').click();
+  $('#bcBtn').onclick = () => $('#bcInput').click();
+  $('#pkgInput').onchange = async e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    toast('Processing photo…', 1200);
+    try {
+      const { fullBlob, thumb } = await compressPhoto(f);
+      draft.photoBlob = fullBlob; draft.thumb = thumb;
+      setPhotoPreview('pkg', thumb);
+    } catch (err) { toast('Could not read photo'); }
+  };
+  $('#bcInput').onchange = async e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    blobToDataURL(f).then(u => setPhotoPreview('bc', u)).catch(() => {});
+    $('#bcStatus').innerHTML = '<span class="spin"></span> reading barcode…';
+    const code = await decodeBarcodeFile(f);
+    if (code) { $('#manualBc').value = code; await applyLookup(code); }
+    else $('#bcStatus').textContent = 'Couldn’t read the barcode — try a closer, straighter shot, or type the number below.';
+  };
+  $('#manualBcGo').onclick = () => {
+    const c = $('#manualBc').value.trim().replace(/\D/g, '');
+    if (c.length >= 6) applyLookup(c); else toast('Enter the digits under the barcode');
+  };
+  $('#vGood').onclick = () => { draft.status = 'good'; $('#vGood').classList.add('on'); $('#vBad').classList.remove('on'); };
+  $('#vBad').onclick = () => { draft.status = 'bad'; $('#vBad').classList.add('on'); $('#vGood').classList.remove('on'); };
+  $('#saveBtn').onclick = saveForm;
+  $('#cancelBtn').onclick = () => { resetForm(); showView('list'); };
+
+  $('#sSave').onclick = saveSettings;
+  $('#sCacheImgs').onclick = cacheAllImages;
+  $('#expBtn').onclick = exportJSON;
+  $('#impBtn').onclick = () => $('#impInput').click();
+  $('#impInput').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) importJSON(f); };
+
+  window.addEventListener('online', () => queueSync());
+}
+
+/* ---------------- init ---------------- */
+async function init() {
+  await openDB();
+  items = (await dbAllItems()) || [];
+  const st = await dbGetMeta('settings'); if (st) settings = Object.assign(settings, st);
+  imgDirty = new Set((await dbGetMeta('imgDirty')) || []);
+  bindEvents();
+  const cats = [...new Set(live().map(i => i.category).filter(Boolean))].sort();
+  $('#catList').innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
+  resetForm();
+  showView('list');
+  if (ghConfigured() && navigator.onLine) syncNow(true);
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+}
+init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000); });
+
+/* test hooks (used by headless smoke tests) */
+window.__FC = {
+  mergeItems, esc, uid, num, matches,
+  state: () => ({ items, settings, filter }),
+  saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
+  reload: async () => { items = await dbAllItems(); return items; },
+  renderList
+};
+</script>
+</body>
+</html>
