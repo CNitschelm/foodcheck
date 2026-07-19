@@ -206,6 +206,7 @@ nav button.addbig .nico{background:var(--accent);color:#fff;width:44px;height:44
       <input type="file" accept="image/*" capture="environment" id="pkgInput" hidden>
       <input type="file" accept="image/*" capture="environment" id="bcInput" hidden>
       <div id="bcStatus"></div>
+      <div class="hint" id="aiStatus"></div>
       <div class="manualbc">
         <input id="manualBc" type="text" inputmode="numeric" placeholder="…or type barcode number">
         <button class="btn sm" id="manualBcGo">Look up</button>
@@ -265,6 +266,15 @@ nav button.addbig .nico{background:var(--accent);color:#fff;width:44px;height:44
         </div>
         <div class="hint">Token is stored only in this browser. Set it up once per device. Each device pulls/merges/pushes <code>data/items.json</code> + photos in your repo automatically.</div>
         <div class="hint" id="sStatus"></div>
+      </div>
+    </div>
+    <div class="formcard">
+      <h3>AI auto-fill (optional)</h3>
+      <div class="stack">
+        <div class="field"><label>Anthropic API key</label>
+          <input id="sAiKey" type="password" placeholder="sk-ant-…" autocomplete="off"></div>
+        <button class="btn sm" id="sAiSave" style="align-self:flex-start">Save key</button>
+        <div class="hint">With a key set, uploading photos automatically reads the package/label and fills in name, brand, category and nutrition — you just pick Good/Bad and save. The key stays in this browser only. Create one at console.anthropic.com (pay-per-use, well under 1¢ per item).</div>
       </div>
     </div>
     <div class="formcard">
@@ -405,7 +415,7 @@ const dbSetMeta   = (k, v) => idb('meta', 'readwrite', s => s.put(v, k));
 
 /* ---------------- state ---------------- */
 let items = [];
-let settings = { repo: '', token: '', branch: 'main' };
+let settings = { repo: '', token: '', branch: 'main', aiKey: '' };
 let imgDirty = new Set();
 let filter = 'all', sortMode = 'new', searchQ = '';
 let editingId = null;
@@ -616,12 +626,12 @@ async function lookupBarcode(code) {
 /* ---------------- add / edit form ---------------- */
 function resetForm() {
   editingId = null;
-  draft = { status: null, barcode: '', photoBlob: null, thumb: '', off: null };
+  draft = { status: null, barcode: '', photoBlob: null, thumb: '', off: null, aiPkgB64: '', aiBcB64: '', aiBusy: false };
   ['#fName', '#fBrand', '#fCat', '#fNotes', '#manualBc',
    '#nKcal', '#nFat', '#nSatfat', '#nCarbs', '#nSugars', '#nFiber', '#nProtein', '#nSalt']
     .forEach(s => { const el = $(s); if (el) el.value = ''; });
   $('#vGood').classList.remove('on'); $('#vBad').classList.remove('on');
-  $('#bcStatus').innerHTML = ''; $('#offHint').textContent = '';
+  $('#bcStatus').innerHTML = ''; $('#offHint').textContent = ''; $('#aiStatus').innerHTML = '';
   setPhotoPreview('pkg', null); setPhotoPreview('bc', null);
   $('#saveBtn').textContent = 'Save item';
 }
@@ -725,6 +735,66 @@ async function saveForm() {
   await dbPutItem(clean(it));
   toast(wasEditing ? 'Updated' : (draft.status === 'good' ? 'Added to whitelist ✓' : 'Added to blacklist ✕'));
   resetForm(); showView('list'); queueSync();
+}
+
+/* ---------------- AI auto-fill (Anthropic vision) ---------------- */
+const AI_MODEL = 'claude-haiku-4-5-20251001';
+const AI_PROMPT = 'You are labeling a grocery product from photo(s): package front and/or barcode/nutrition label. Reply with ONLY minified JSON, no markdown, exactly this shape: {"name":"","brand":"","category":"","quantity":"","barcode":"","nutrition":{"kcal":null,"fat":null,"satfat":null,"carbs":null,"sugars":null,"fiber":null,"protein":null,"salt":null}}. Rules: name = product name as printed; category = one or two words like Snacks, Dairy, Beverages; barcode = the digits printed under a barcode if clearly readable, else ""; nutrition = per-100g values from a visible nutrition table only; use null for any value not clearly visible — never guess.';
+
+async function fileToB64Scaled(file, maxW) {
+  const img = await fileToImage(file);
+  const c = drawScaled(img, maxW);
+  return c.toDataURL('image/jpeg', 0.72).split(',')[1];
+}
+function setAiStatus(html) { const el = $('#aiStatus'); if (el) el.innerHTML = html; }
+function fillIfEmpty(sel, val) {
+  const el = $(sel);
+  if (el && !el.value && val !== null && val !== undefined && val !== '') el.value = val;
+}
+function applyAIFill(d) {
+  if (!d || typeof d !== 'object') return;
+  fillIfEmpty('#fName', d.name); fillIfEmpty('#fBrand', d.brand); fillIfEmpty('#fCat', d.category);
+  const n = d.nutrition || {};
+  const map = { kcal: '#nKcal', fat: '#nFat', satfat: '#nSatfat', carbs: '#nCarbs',
+                sugars: '#nSugars', fiber: '#nFiber', protein: '#nProtein', salt: '#nSalt' };
+  for (const [k, sel] of Object.entries(map)) fillIfEmpty(sel, num(n[k]));
+  setAiStatus('\ud83e\udd16 AI filled the details \u2014 review, then save.');
+  const bc = String(d.barcode || '').replace(/\D/g, '');
+  if (bc.length >= 8 && draft && !draft.barcode) { $('#manualBc').value = bc; applyLookup(bc); }
+}
+const scheduleAI = debounce(() => { analyzePhotosAI(); }, 1200);
+async function analyzePhotosAI() {
+  if (!settings.aiKey || !draft || draft.aiBusy) return;
+  const imgs = [];
+  if (draft.aiPkgB64) imgs.push(draft.aiPkgB64);
+  if (draft.aiBcB64) imgs.push(draft.aiBcB64);
+  if (!imgs.length) return;
+  draft.aiBusy = true;
+  setAiStatus('<span class="spin"></span> AI reading photos…');
+  try {
+    const content = imgs.map(b64 => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } }));
+    content.push({ type: 'text', text: AI_PROMPT });
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': settings.aiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ model: AI_MODEL, max_tokens: 600, messages: [{ role: 'user', content }] })
+    });
+    if (!r.ok) throw new Error('AI request failed (' + r.status + (r.status === 401 ? ' — check key' : '') + ')');
+    const j = await r.json();
+    const txt = (j.content && j.content[0] && j.content[0].text) || '';
+    const m = txt.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('unreadable AI reply');
+    applyAIFill(JSON.parse(m[0]));
+  } catch (e) {
+    setAiStatus('AI auto-fill failed: ' + esc(e.message));
+  } finally {
+    draft.aiBusy = false;
+  }
 }
 
 /* ---------------- GitHub sync ---------------- */
@@ -837,6 +907,7 @@ async function syncNow(auto) {
 /* ---------------- settings ---------------- */
 function renderSettings() {
   $('#sRepo').value = settings.repo; $('#sToken').value = settings.token; $('#sBranch').value = settings.branch || 'main';
+  $('#sAiKey').value = settings.aiKey || '';
   const g = live().filter(i => i.status === 'good').length;
   const b = live().filter(i => i.status === 'bad').length;
   $('#statsLine').textContent = `${live().length} items (${g} good, ${b} bad) stored on this device.`;
@@ -935,11 +1006,13 @@ function bindEvents() {
       const { fullBlob, thumb } = await compressPhoto(f);
       draft.photoBlob = fullBlob; draft.thumb = thumb;
       setPhotoPreview('pkg', thumb);
+      blobToB64(fullBlob).then(b => { draft.aiPkgB64 = b; scheduleAI(); }).catch(() => {});
     } catch (err) { toast('Could not read photo'); }
   };
   $('#bcInput').onchange = async e => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     blobToDataURL(f).then(u => setPhotoPreview('bc', u)).catch(() => {});
+    fileToB64Scaled(f, 1200).then(b => { draft.aiBcB64 = b; scheduleAI(); }).catch(() => {});
     $('#bcStatus').innerHTML = '<span class="spin"></span> reading barcode…';
     const code = await decodeBarcodeFile(f);
     if (code) { $('#manualBc').value = code; await applyLookup(code); }
@@ -955,6 +1028,11 @@ function bindEvents() {
   $('#cancelBtn').onclick = () => { resetForm(); showView('list'); };
 
   $('#sSave').onclick = saveSettings;
+  $('#sAiSave').onclick = async () => {
+    settings.aiKey = $('#sAiKey').value.trim();
+    await dbSetMeta('settings', { ...settings });
+    toast(settings.aiKey ? 'AI key saved \u2014 photo auto-fill is on' : 'AI key removed');
+  };
   $('#sCacheImgs').onclick = cacheAllImages;
   $('#expBtn').onclick = exportJSON;
   $('#impBtn').onclick = () => $('#impInput').click();
@@ -983,7 +1061,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches,
+  mergeItems, esc, uid, num, matches, applyAIFill, fillIfEmpty,
   state: () => ({ items, settings, filter }),
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
