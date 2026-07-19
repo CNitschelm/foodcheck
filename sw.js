@@ -1,5 +1,5 @@
 /* FoodCheck service worker — offline app shell */
-const VERSION = 'foodcheck-v2';
+const VERSION = 'foodcheck-v3';
 const PRECACHE = [
   './',
   './index.html',
@@ -25,7 +25,7 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
 
   // never cache API calls — data must be fresh
-  if (url.hostname === 'api.github.com' || url.hostname === 'api.anthropic.com' || url.hostname.endsWith('openfoodfacts.org')) return;
+  if (url.hostname === 'api.github.com' || url.hostname === 'api.anthropic.com' || url.hostname === 'generativelanguage.googleapis.com' || url.hostname.endsWith('openfoodfacts.org')) return;
 
   // app shell + CDN libs: cache-first, refresh in background
   if (url.origin === location.origin || url.hostname === 'cdn.jsdelivr.net') {

@@ -271,10 +271,10 @@ nav button.addbig .nico{background:var(--accent);color:#fff;width:44px;height:44
     <div class="formcard">
       <h3>AI auto-fill (optional)</h3>
       <div class="stack">
-        <div class="field"><label>Anthropic API key</label>
-          <input id="sAiKey" type="password" placeholder="sk-ant-…" autocomplete="off"></div>
+        <div class="field"><label>AI key — Google Gemini (AIza…, free) or Anthropic (sk-ant…)</label>
+          <input id="sAiKey" type="password" placeholder="AIza… or sk-ant-…" autocomplete="off"></div>
         <button class="btn sm" id="sAiSave" style="align-self:flex-start">Save key</button>
-        <div class="hint">With a key set, uploading photos automatically reads the package/label and fills in name, brand, category and nutrition — you just pick Good/Bad and save. The key stays in this browser only. Create one at console.anthropic.com (pay-per-use, well under 1¢ per item).</div>
+        <div class="hint">With a key set, uploading a photo identifies the product and fills name, brand, category and nutrition (read from the label when visible, otherwise typical values for that product) — you just pick Good/Bad and save. Provider auto-detected from the key. Free key: aistudio.google.com (Google Gemini, no card needed). Paid: console.anthropic.com. Key stays in this browser only.</div>
       </div>
     </div>
     <div class="formcard">
@@ -739,7 +739,8 @@ async function saveForm() {
 
 /* ---------------- AI auto-fill (Anthropic vision) ---------------- */
 const AI_MODEL = 'claude-haiku-4-5-20251001';
-const AI_PROMPT = 'You are labeling a grocery product from photo(s): package front and/or barcode/nutrition label. Reply with ONLY minified JSON, no markdown, exactly this shape: {"name":"","brand":"","category":"","quantity":"","barcode":"","nutrition":{"kcal":null,"fat":null,"satfat":null,"carbs":null,"sugars":null,"fiber":null,"protein":null,"salt":null}}. Rules: name = product name as printed; category = one or two words like Snacks, Dairy, Beverages; barcode = the digits printed under a barcode if clearly readable, else ""; nutrition = per-100g values from a visible nutrition table only; use null for any value not clearly visible — never guess.';
+const AI_PROMPT = 'Identify the grocery product in the photo(s) (package front and/or barcode/nutrition label). Step 1: identify the exact product \u2014 brand and product name as printed. Step 2: nutrition per 100 g: if a nutrition table is visible, read it exactly and set "nutrition_source":"label". If no table is visible, use your knowledge of this specific product (or its closest typical equivalent) to give realistic per-100 g values and set "nutrition_source":"estimate". Reply with ONLY minified JSON, no markdown: {"name":"","brand":"","category":"","quantity":"","barcode":"","nutrition_source":"label|estimate","nutrition":{"kcal":0,"fat":0,"satfat":0,"carbs":0,"sugars":0,"fiber":0,"protein":0,"salt":0}}. Rules: category = 1-2 words like Snacks, Dairy, Beverages; quantity = net weight/volume if visible; barcode = digits only if clearly readable, else ""; only use null for nutrition values you cannot even estimate; if you cannot identify the product at all, set name to your best visual description.';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 async function fileToB64Scaled(file, maxW) {
   const img = await fileToImage(file);
@@ -758,9 +759,55 @@ function applyAIFill(d) {
   const map = { kcal: '#nKcal', fat: '#nFat', satfat: '#nSatfat', carbs: '#nCarbs',
                 sugars: '#nSugars', fiber: '#nFiber', protein: '#nProtein', salt: '#nSalt' };
   for (const [k, sel] of Object.entries(map)) fillIfEmpty(sel, num(n[k]));
-  setAiStatus('\ud83e\udd16 AI filled the details \u2014 review, then save.');
+  const srcNote = d.nutrition_source === 'label' ? 'nutrition read from the label'
+    : d.nutrition_source === 'estimate' ? 'nutrition = typical values for this product (estimate)'
+    : 'details filled';
+  setAiStatus('\ud83e\udd16 AI identified: <b>' + esc(d.name || 'product') + '</b> \u2014 ' + srcNote + '. Review, then save.');
   const bc = String(d.barcode || '').replace(/\D/g, '');
   if (bc.length >= 8 && draft && !draft.barcode) { $('#manualBc').value = bc; applyLookup(bc); }
+}
+function extractJSON(txt) {
+  const m = String(txt).match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('unreadable AI reply');
+  return JSON.parse(m[0]);
+}
+async function callAnthropic(imgs) {
+  const content = imgs.map(b64 => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } }));
+  content.push({ type: 'text', text: AI_PROMPT });
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': settings.aiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ model: AI_MODEL, max_tokens: 700, messages: [{ role: 'user', content }] })
+  });
+  if (!r.ok) {
+    let msg = 'Anthropic request failed (' + r.status + ')';
+    try { const e = await r.json(); if (e.error && e.error.message) msg += ': ' + e.error.message.slice(0, 140); } catch (x) {}
+    throw new Error(msg);
+  }
+  const j = await r.json();
+  return extractJSON((j.content && j.content[0] && j.content[0].text) || '');
+}
+async function callGemini(imgs) {
+  const parts = imgs.map(b64 => ({ inline_data: { mime_type: 'image/jpeg', data: b64 } }));
+  parts.push({ text: AI_PROMPT });
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': settings.aiKey },
+    body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: 900, responseMimeType: 'application/json' } })
+  });
+  if (!r.ok) {
+    let msg = 'Gemini request failed (' + r.status + ')';
+    try { const e = await r.json(); if (e.error && e.error.message) msg += ': ' + e.error.message.slice(0, 140); } catch (x) {}
+    throw new Error(msg);
+  }
+  const j = await r.json();
+  const gparts = (((j.candidates || [])[0] || {}).content || {}).parts || [];
+  return extractJSON(gparts.map(p => p.text || '').join(''));
 }
 const scheduleAI = debounce(() => { analyzePhotosAI(); }, 1200);
 async function analyzePhotosAI() {
@@ -772,24 +819,8 @@ async function analyzePhotosAI() {
   draft.aiBusy = true;
   setAiStatus('<span class="spin"></span> AI reading photos…');
   try {
-    const content = imgs.map(b64 => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } }));
-    content.push({ type: 'text', text: AI_PROMPT });
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': settings.aiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({ model: AI_MODEL, max_tokens: 600, messages: [{ role: 'user', content }] })
-    });
-    if (!r.ok) throw new Error('AI request failed (' + r.status + (r.status === 401 ? ' — check key' : '') + ')');
-    const j = await r.json();
-    const txt = (j.content && j.content[0] && j.content[0].text) || '';
-    const m = txt.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error('unreadable AI reply');
-    applyAIFill(JSON.parse(m[0]));
+    const isGemini = settings.aiKey.startsWith('AIza');
+    applyAIFill(isGemini ? await callGemini(imgs) : await callAnthropic(imgs));
   } catch (e) {
     setAiStatus('AI auto-fill failed: ' + esc(e.message));
   } finally {

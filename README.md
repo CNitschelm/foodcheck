@@ -43,8 +43,11 @@ Sync runs on app start, after every save, and via the **Sync** button. Devices m
 **Security note:** the token is stored in the browser only. Scope it to the single data repo so it can't touch anything else.
 
 ## AI auto-fill (optional)
-Add an Anthropic API key in Settings → AI auto-fill (create at console.anthropic.com, pay-per-use).
-With it set: upload photo(s) → AI reads the package/label and fills name, brand, category, nutrition, and even the barcode → you just pick Good/Bad and save. Key stays in the browser.
+Add an AI key in Settings → AI auto-fill. Two options, auto-detected by key format:
+- **Google Gemini** (free, no card): aistudio.google.com → Get API key (`AIza…`)
+- **Anthropic** (pay-per-use): console.anthropic.com (`sk-ant…`)
+
+A front-of-package photo is enough — AI identifies the product and fills typical nutrition values (marked as estimate); if the nutrition label is in the shot it reads exact values. You just pick Good/Bad and save. Key stays in the browser.
 
 ## Backup
 Settings → **Export JSON** (includes photos) / **Import JSON**.
