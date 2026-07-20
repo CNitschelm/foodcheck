@@ -349,8 +349,8 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
     <div class="formcard">
       <h3>AI auto-fill (optional)</h3>
       <div class="stack">
-        <div class="field"><label>AI key — Google Gemini (AIza…, free) or Anthropic (sk-ant…)</label>
-          <input id="sAiKey" type="password" placeholder="AIza… or sk-ant-…" autocomplete="off"></div>
+        <div class="field"><label>AI key — Google Gemini (AIza… or AQ…, free) or Anthropic (sk-ant…)</label>
+          <input id="sAiKey" type="password" placeholder="AIza… / AQ… / sk-ant-…" autocomplete="off"></div>
         <button class="btn sm" id="sAiSave" style="align-self:flex-start">Save key</button>
         <div class="hint">With a key set, uploading a photo identifies the product and fills name, brand, category and nutrition (read from the label when visible, otherwise typical values for that product) — you just pick Good/Bad and save. Provider auto-detected from the key. Free key: aistudio.google.com (Google Gemini, no card needed). Paid: console.anthropic.com. Key stays in this browser only.</div>
       </div>
@@ -990,7 +990,7 @@ async function analyzePhotosAI() {
   draft.aiBusy = true;
   setAiStatus('<span class="spin"></span> AI reading photos…');
   try {
-    const isGemini = settings.aiKey.startsWith('AIza');
+    const isGemini = /^(AIza|AQ[.])/.test(settings.aiKey);
     applyAIFill(isGemini ? await callGemini(imgs) : await callAnthropic(imgs));
   } catch (e) {
     setAiStatus('AI auto-fill failed: ' + esc(e.message));
