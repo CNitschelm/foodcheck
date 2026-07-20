@@ -113,6 +113,14 @@ section[hidden]{display:none}
 .hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
 .hint code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 4px}
 
+/* ---- lock screen ---- */
+#lock{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}
+.lockbox{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:30px 24px;width:min(90vw,360px);text-align:center;display:flex;flex-direction:column;gap:12px}
+.lockbox h2{margin:0;font-size:22px}
+.lockbox p{margin:0;color:var(--muted);font-size:14px;line-height:1.5}
+.lockbox input{padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-size:16px;text-align:center}
+.lockerr{color:var(--bad);font-size:13px;min-height:17px}
+
 /* ---- 3-photo wizard ---- */
 .photobtns.three{grid-template-columns:repeat(3,1fr)}
 .photobtns.three .photobtn{min-height:96px;padding:10px 4px}
@@ -174,6 +182,15 @@ nav button.addbig .nico{background:var(--accent);color:#fff;width:44px;height:44
 </style>
 </head>
 <body>
+
+<div id="lock" hidden><div class="lockbox">
+  <div style="font-size:42px">🛒</div>
+  <h2>FoodCheck</h2>
+  <p id="lockmsg">Enter your password to set up this device.</p>
+  <input id="lockpw" type="password" autocomplete="current-password" placeholder="Password">
+  <button class="btn" id="lockbtn">Unlock</button>
+  <div class="lockerr" id="lockerr"></div>
+</div></div>
 
 <header>
   <h1><span class="logo">🛒</span> FoodCheck</h1>
@@ -284,6 +301,14 @@ nav button.addbig .nico{background:var(--accent);color:#fff;width:44px;height:44
           <input id="sAiKey" type="password" placeholder="AIza… or sk-ant-…" autocomplete="off"></div>
         <button class="btn sm" id="sAiSave" style="align-self:flex-start">Save key</button>
         <div class="hint">With a key set, uploading a photo identifies the product and fills name, brand, category and nutrition (read from the label when visible, otherwise typical values for that product) — you just pick Good/Bad and save. Provider auto-detected from the key. Free key: aistudio.google.com (Google Gemini, no card needed). Paid: console.anthropic.com. Key stays in this browser only.</div>
+      </div>
+    </div>
+    <div class="formcard">
+      <h3>One-password login</h3>
+      <div class="stack">
+        <button class="btn sm" id="bundleBtn" style="align-self:flex-start">Create login bundle from this device</button>
+        <textarea id="bundleOut" hidden readonly style="font-size:11px;min-height:90px;font-family:ui-monospace,monospace"></textarea>
+        <div class="hint">Encrypts this device's keys (sync token + AI key) with a password you choose. Once the bundle is published as <code>config.enc</code> in the app repo, any new device just asks for that password — no key pasting. Keys are never public in plain text (AES-256, PBKDF2).</div>
       </div>
     </div>
     <div class="formcard">
@@ -921,6 +946,72 @@ async function analyzePhotosAI() {
   }
 }
 
+/* ---------------- one-password login (encrypted key bundle) ---------------- */
+const CONFIG_PATH = 'config.enc';
+let lockBundleText = null;
+const b64FromBytes = a => { let s = ''; for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]); return btoa(s); };
+const bytesFromB64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function deriveBundleKey(pw, salt, iters) {
+  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iters, hash: 'SHA-256' }, km,
+    { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function encryptBundle(pw, obj) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveBundleKey(pw, salt, 310000);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key,
+    new TextEncoder().encode(JSON.stringify(obj))));
+  return JSON.stringify({ v: 1, kdf: 'PBKDF2-SHA256', iters: 310000,
+    salt: b64FromBytes(salt), iv: b64FromBytes(iv), data: b64FromBytes(ct) });
+}
+async function decryptBundle(pw, text) {
+  const j = JSON.parse(text);
+  const key = await deriveBundleKey(pw, bytesFromB64(j.salt), j.iters || 310000);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytesFromB64(j.iv) }, key, bytesFromB64(j.data));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+async function exportBundle() {
+  if (!settings.token && !settings.aiKey) { toast('Set up sync and/or AI on this device first'); return; }
+  const p1 = prompt('Choose a login password (you will use it on every device):'); if (!p1) return;
+  if (p1.length < 8) { toast('Use at least 8 characters'); return; }
+  const p2 = prompt('Repeat the password:'); if (p1 !== p2) { toast('Passwords do not match'); return; }
+  toast('Encrypting…');
+  const text = await encryptBundle(p1, {
+    repo: settings.repo, token: settings.token, branch: settings.branch, aiKey: settings.aiKey });
+  $('#bundleOut').hidden = false; $('#bundleOut').value = text;
+  try { await navigator.clipboard.writeText(text); toast('Encrypted bundle copied — send it to Claude to publish'); }
+  catch (e) { toast('Bundle ready below — copy and send it to Claude to publish', 4000); }
+}
+async function tryUnlock() {
+  const pw = $('#lockpw').value; if (!pw) return;
+  $('#lockerr').textContent = ''; $('#lockbtn').disabled = true; $('#lockbtn').textContent = 'Unlocking…';
+  try {
+    const cfg = await decryptBundle(pw, lockBundleText);
+    settings = Object.assign(settings, cfg);
+    await dbSetMeta('settings', { ...settings });
+    $('#lock').hidden = true;
+    toast('Device set up ✓ — syncing…');
+    syncNow(true);
+  } catch (e) {
+    $('#lockerr').textContent = 'Wrong password — try again.';
+  } finally {
+    $('#lockbtn').disabled = false; $('#lockbtn').textContent = 'Unlock';
+  }
+}
+async function maybeShowLock() {
+  if (ghConfigured() || settings.aiKey) return;
+  try {
+    const r = await fetch(CONFIG_PATH + '?_=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const text = await r.text();
+    if (!text || text.length < 50 || text[0] !== '{') return;
+    lockBundleText = text;
+    $('#lock').hidden = false;
+    setTimeout(() => { const el = $('#lockpw'); if (el) el.focus(); }, 60);
+  } catch (e) {}
+}
+
 /* ---------------- GitHub sync ---------------- */
 const GH = 'https://api.github.com';
 const DATA_PATH = 'data/items.json';
@@ -1156,6 +1247,9 @@ function bindEvents() {
   $('#saveBtn').onclick = saveForm;
 
   $('#sSave').onclick = saveSettings;
+  $('#bundleBtn').onclick = exportBundle;
+  $('#lockbtn').onclick = tryUnlock;
+  $('#lockpw').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
   $('#sAiSave').onclick = async () => {
     settings.aiKey = $('#sAiKey').value.trim();
     await dbSetMeta('settings', { ...settings });
@@ -1182,6 +1276,7 @@ async function init() {
   resetForm();
   showView('list');
   if (ghConfigured() && navigator.onLine) syncNow(true);
+  maybeShowLock();
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
@@ -1190,7 +1285,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches, applyAIFill, fillIfEmpty, renderReviewSummary, onSlotFile,
+  mergeItems, esc, uid, num, matches, applyAIFill, fillIfEmpty, renderReviewSummary, onSlotFile, encryptBundle, decryptBundle,
   state: () => ({ items, settings, filter }),
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
