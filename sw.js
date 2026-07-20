@@ -1,5 +1,5 @@
 /* FoodCheck service worker — offline app shell */
-const VERSION = 'foodcheck-v6';
+const VERSION = 'foodcheck-v7';
 const PRECACHE = [
   './',
   './index.html',

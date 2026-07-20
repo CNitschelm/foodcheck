@@ -190,6 +190,7 @@ nav button.addbig .nico{background:var(--accent);color:#fff;width:44px;height:44
   <input id="lockpw" type="password" autocomplete="current-password" placeholder="Password">
   <button class="btn" id="lockbtn">Unlock</button>
   <div class="lockerr" id="lockerr"></div>
+  <button class="btn ghost sm" id="lockskip">Skip — set up manually</button>
 </div></div>
 
 <header>
@@ -1005,7 +1006,9 @@ async function maybeShowLock() {
     const r = await fetch(CONFIG_PATH + '?_=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) return;
     const text = await r.text();
-    if (!text || text.length < 50 || text[0] !== '{') return;
+    let j = null;
+    try { j = JSON.parse(text); } catch (e) { return; }
+    if (!j || j.v !== 1 || j.kdf !== 'PBKDF2-SHA256' || !j.salt || !j.iv || !j.data) return;
     lockBundleText = text;
     $('#lock').hidden = false;
     setTimeout(() => { const el = $('#lockpw'); if (el) el.focus(); }, 60);
@@ -1250,6 +1253,7 @@ function bindEvents() {
   $('#bundleBtn').onclick = exportBundle;
   $('#lockbtn').onclick = tryUnlock;
   $('#lockpw').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+  $('#lockskip').onclick = () => { $('#lock').hidden = true; };
   $('#sAiSave').onclick = async () => {
     settings.aiKey = $('#sAiKey').value.trim();
     await dbSetMeta('settings', { ...settings });
