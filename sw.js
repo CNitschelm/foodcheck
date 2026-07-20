@@ -1,5 +1,5 @@
 /* FoodCheck service worker — offline app shell */
-const VERSION = 'foodcheck-v13';
+const VERSION = 'foodcheck-v14';
 const PRECACHE = [
   './',
   './index.html',
@@ -18,6 +18,13 @@ self.addEventListener('activate', e => {
       Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
+});
+
+self.addEventListener('sync', e => {
+  if (e.tag === 'fc-enrich') {
+    e.waitUntil(self.clients.matchAll({ includeUncontrolled: true }).then(cs =>
+      cs.forEach(c => c.postMessage({ type: 'process-queue' }))));
+  }
 });
 
 self.addEventListener('fetch', e => {

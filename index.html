@@ -119,18 +119,12 @@ section[hidden]{display:none}
 .photobtn img.prev{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .photobtn .clear{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.62);color:#fff;
   border:none;border-radius:50%;width:27px;height:27px;font-size:14px;z-index:2}
-#nextBtn{width:100%;margin-top:14px;padding:15px;font-size:16.5px;border-radius:14px;
-  background:linear-gradient(135deg,var(--good),var(--good-2));color:#fff;border:none;font-weight:700;
-  box-shadow:0 6px 18px rgba(22,163,74,.35)}
-#nextBtn:disabled{background:var(--line);color:var(--muted);box-shadow:none}
-#bcStatus{font-size:13px;margin-top:10px;color:var(--muted);min-height:18px}
-#bcStatus .code{font-family:ui-monospace,monospace;background:var(--bg);border:1px solid var(--line);
-  border-radius:7px;padding:2px 7px}
-#aiStatus{min-height:16px}
 #rvImgRow{display:flex;gap:8px;margin-bottom:10px}
 .rvimg{width:31%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;border:1px solid var(--line);box-shadow:var(--shadow)}
 .rvname{font-size:21px;font-weight:750;letter-spacing:-.02em;margin-top:4px}
-#editToggle{margin-top:12px}
+
+.pendchip{position:absolute;bottom:8px;left:8px;background:rgba(15,23,42,.72);color:#fff;
+  font-size:10.5px;padding:4px 9px;border-radius:999px;font-weight:600;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 
 /* ---- buttons ---- */
 .btn{border:none;border-radius:13px;padding:11px 17px;font-weight:650;
@@ -259,61 +253,50 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
 
   <!-- ============ ADD / EDIT ============ -->
   <section id="view-add" hidden>
-    <div id="stepPhotos">
-      <div class="formcard">
-        <h3>Photos — add at least one</h3>
-        <div class="photobtns three">
-          <div class="photobtn" id="pfBtn"><span class="ico">📦</span><span class="lb">Front</span><span class="sub">card image</span></div>
-          <div class="photobtn" id="pbBtn"><span class="ico">📋</span><span class="lb">Back / label</span><span class="sub">nutrition</span></div>
-          <div class="photobtn" id="pcBtn"><span class="ico">🏷️</span><span class="lb">Barcode</span><span class="sub">exact match</span></div>
-        </div>
-        <input type="file" accept="image/*" id="pfInput" hidden>
-        <input type="file" accept="image/*" id="pbInput" hidden>
-        <input type="file" accept="image/*" id="pcInput" hidden>
-        <div class="hint">Tap a slot — your phone offers camera or gallery. One photo is enough; more photos = better data.</div>
-        <button class="btn" id="nextBtn" disabled>Next →</button>
+    <div class="formcard" id="photosCard">
+      <h3>Photos — at least one</h3>
+      <div class="photobtns three">
+        <div class="photobtn" id="pfBtn"><span class="ico">📦</span><span class="lb">Front</span><span class="sub">card image</span></div>
+        <div class="photobtn" id="pbBtn"><span class="ico">📋</span><span class="lb">Back / label</span><span class="sub">nutrition</span></div>
+        <div class="photobtn" id="pcBtn"><span class="ico">🏷️</span><span class="lb">Barcode</span><span class="sub">exact match</span></div>
+      </div>
+      <input type="file" accept="image/*" id="pfInput" hidden>
+      <input type="file" accept="image/*" id="pbInput" hidden>
+      <input type="file" accept="image/*" id="pcInput" hidden>
+      <div class="hint">Tap a slot — camera or gallery. Name and nutrition fill themselves in automatically after you save.</div>
+    </div>
+
+    <div class="formcard" id="detailsCard" hidden>
+      <h3>Details</h3>
+      <div id="rvImgRow"></div>
+      <div class="field"><label>Name</label><input id="fName"></div>
+      <div class="field"><label>Brand</label><input id="fBrand"></div>
+      <div class="field"><label>Category</label><input id="fCat" list="catList"><datalist id="catList"></datalist></div>
+      <h3 style="margin-top:14px">Nutrition (per 100 g)</h3>
+      <div class="nutgrid">
+        <div class="field"><label>Calories (kcal)</label><input id="nKcal" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Fat (g)</label><input id="nFat" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Saturated fat (g)</label><input id="nSatfat" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Carbs (g)</label><input id="nCarbs" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Sugars (g)</label><input id="nSugars" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Fiber (g)</label><input id="nFiber" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Protein (g)</label><input id="nProtein" type="number" step="any" inputmode="decimal"></div>
+        <div class="field"><label>Salt (g)</label><input id="nSalt" type="number" step="any" inputmode="decimal"></div>
       </div>
     </div>
 
-    <div id="stepReview" hidden>
-      <div class="formcard">
-        <h3>Product</h3>
-        <div id="rvImgRow"></div>
-        <div id="bcStatus"></div>
-        <div class="hint" id="aiStatus"></div>
-        <div id="rvInfo"></div>
-        <button class="btn sm ghost" id="editToggle">✏️ Edit details</button>
+    <div class="formcard">
+      <h3>Verdict</h3>
+      <div class="verdict">
+        <button class="vbtn good" id="vGood">✓ Good — buy again</button>
+        <button class="vbtn bad" id="vBad">✕ Bad — never again</button>
       </div>
-      <div class="formcard" id="detailsCard" hidden>
-        <h3>Details</h3>
-        <div class="field"><label>Name</label><input id="fName"></div>
-        <div class="field"><label>Brand</label><input id="fBrand"></div>
-        <div class="field"><label>Category</label><input id="fCat" list="catList"><datalist id="catList"></datalist></div>
-        <h3 style="margin-top:14px">Nutrition (per 100 g)</h3>
-        <div class="nutgrid">
-          <div class="field"><label>Calories (kcal)</label><input id="nKcal" type="number" step="any" inputmode="decimal"></div>
-          <div class="field"><label>Fat (g)</label><input id="nFat" type="number" step="any" inputmode="decimal"></div>
-          <div class="field"><label>Saturated fat (g)</label><input id="nSatfat" type="number" step="any" inputmode="decimal"></div>
-          <div class="field"><label>Carbs (g)</label><input id="nCarbs" type="number" step="any" inputmode="decimal"></div>
-          <div class="field"><label>Sugars (g)</label><input id="nSugars" type="number" step="any" inputmode="decimal"></div>
-          <div class="field"><label>Fiber (g)</label><input id="nFiber" type="number" step="any" inputmode="decimal"></div>
-          <div class="field"><label>Protein (g)</label><input id="nProtein" type="number" step="any" inputmode="decimal"></div>
-          <div class="field"><label>Salt (g)</label><input id="nSalt" type="number" step="any" inputmode="decimal"></div>
-        </div>
-        <div class="hint" id="offHint"></div>
-      </div>
-      <div class="formcard">
-        <h3>Verdict</h3>
-        <div class="verdict">
-          <button class="vbtn good" id="vGood">✓ Good — buy again</button>
-          <button class="vbtn bad" id="vBad">✕ Bad — never again</button>
-        </div>
-        <div class="field" style="margin-top:12px"><label>Notes (optional)</label><textarea id="fNotes" placeholder="Why good/bad? Taste, price…"></textarea></div>
-      </div>
-      <div class="savebar">
-        <button class="btn ghost" id="backBtn">← Back</button>
-        <button class="btn" id="saveBtn">Save item</button>
-      </div>
+      <div class="field" style="margin-top:12px"><label>Notes (optional)</label><textarea id="fNotes" placeholder="Why good/bad? Taste, price…"></textarea></div>
+    </div>
+
+    <div class="savebar">
+      <button class="btn ghost" id="backBtn">Cancel</button>
+      <button class="btn" id="saveBtn">Save item</button>
     </div>
   </section>
 
@@ -421,7 +404,16 @@ function blobToDataURL(blob) {
     r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob);
   });
 }
-function blobToB64(blob) { return blobToDataURL(blob).then(u => u.split(',')[1]); }
+async function blobToB64(blob) {
+  if (window.__TEST_B64) return window.__TEST_B64; // headless test hook
+  const buf = (typeof blob.arrayBuffer === 'function')
+    ? await blob.arrayBuffer()
+    : await new Response(blob).arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let bin = ''; const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  return btoa(bin);
+}
 function b64EncodeUnicode(str) {
   const bytes = new TextEncoder().encode(str);
   let bin = ''; const CH = 0x8000;
@@ -569,6 +561,7 @@ function renderList() {
       ${it.thumb ? `<img class="ph" src="${it.thumb}" alt="" loading="lazy">`
                  : `<div class="noph">${it.status === 'bad' ? '✕' : '🛒'}</div>`}
       <span class="badge ${it.status}">${it.status === 'good' ? '✓ GOOD' : '✕ BAD'}</span>
+      ${it.pending ? '<span class="pendchip">🤖 identifying…</span>' : ''}
       ${it.nutriscore && NS_COLORS[it.nutriscore] ?
         `<span class="nscore" style="background:${NS_COLORS[it.nutriscore]}">${esc(it.nutriscore)}</span>` : ''}
       <div class="info">
@@ -607,7 +600,9 @@ async function openDetail(id) {
     ${it.notes ? `<div class="dnotes">${esc(it.notes)}</div>` : ''}
     ${nutRows ? `<table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
     <div class="dmeta">${it.barcode ? 'Barcode ' + esc(it.barcode) + ' · ' : ''}Added ${new Date(it.createdAt).toLocaleDateString()}</div>
+    ${it.pending ? '<div class="hint">🤖 Identifying in the background — details fill in automatically.</div>' : ''}
     <div class="drow">
+      ${(it.pending || !it.name) ? '<button class="btn ghost" id="dIdentify">↻ Identify now</button>' : ''}
       <button class="btn ghost" id="dEdit">Edit</button>
       <button class="btn danger" id="dDelete">Delete</button>
     </div>`;
@@ -640,6 +635,13 @@ async function openDetail(id) {
   if (!shown && !wrap.children.length && it.thumb)
     wrap.innerHTML = `<img class="dimg" src="${it.thumb}" alt="">`;
 
+  const idBtn = $('#dIdentify');
+  if (idBtn) idBtn.onclick = async () => {
+    idBtn.disabled = true; idBtn.textContent = 'Identifying…';
+    it.pending = 1; it.aiDone = 0;
+    try { await enrichItem(it); } catch (e) {}
+    renderList(); queueSync(); openDetail(it.id);
+  };
   $('#dGood').onclick = () => setStatus(it.id, 'good');
   $('#dBad').onclick = () => setStatus(it.id, 'bad');
   $('#dEdit').onclick = () => { closeSheet(); startEdit(it.id); };
@@ -667,13 +669,16 @@ function loadZXing() {
   if (window.ZXing) return Promise.resolve();
   if (!zxingP) zxingP = new Promise((res, rej) => {
     const s = document.createElement('script');
+    const to = setTimeout(() => { zxingP = null; rej(new Error('ZXing load timeout')); }, 8000);
     s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
-    s.onload = res; s.onerror = () => { zxingP = null; rej(new Error('ZXing failed to load')); };
+    s.onload = () => { clearTimeout(to); res(); };
+    s.onerror = () => { clearTimeout(to); zxingP = null; rej(new Error('ZXing failed to load')); };
     document.head.appendChild(s);
   });
   return zxingP;
 }
 async function decodeBarcodeFile(file) {
+  if (window.__TEST_NO_DECODE) return null; // headless test hook
   // 1) native BarcodeDetector (Chrome/Android — fast & robust)
   try {
     if ('BarcodeDetector' in window) {
@@ -728,27 +733,23 @@ async function lookupBarcode(code) {
   };
 }
 
-/* ---------------- add / edit form (photo-first wizard) ---------------- */
+/* ---------------- add / edit form (instant save) ---------------- */
 const SLOTS = ['f', 'b', 'c'];
 const SLOT_INPUT = { f: '#pfInput', b: '#pbInput', c: '#pcInput' };
 const SLOT_BTN = { f: '#pfBtn', b: '#pbBtn', c: '#pcBtn' };
 
 function resetForm() {
   editingId = null;
-  draft = { status: null, barcode: '', off: null, aiBusy: false,
-            photos: { f: null, b: null, c: null }, files: { f: null, b: null, c: null } };
+  draft = { status: null, photos: { f: null, b: null, c: null } };
   ['#fName', '#fBrand', '#fCat', '#fNotes',
    '#nKcal', '#nFat', '#nSatfat', '#nCarbs', '#nSugars', '#nFiber', '#nProtein', '#nSalt']
     .forEach(s => { const el = $(s); if (el) el.value = ''; });
   $('#vGood').classList.remove('on'); $('#vBad').classList.remove('on');
-  $('#bcStatus').innerHTML = ''; $('#offHint').textContent = ''; $('#aiStatus').innerHTML = '';
-  $('#rvInfo').innerHTML = ''; $('#rvImgRow').innerHTML = '';
+  $('#rvImgRow').innerHTML = '';
   for (const s of SLOTS) setSlotPreview(s, null);
-  $('#nextBtn').disabled = true;
+  $('#photosCard').hidden = false;
   $('#detailsCard').hidden = true;
-  $('#stepPhotos').hidden = false; $('#stepReview').hidden = true;
   $('#saveBtn').textContent = 'Save item';
-  $('#backBtn').textContent = '← Back';
 }
 function setSlotPreview(slot, dataURL) {
   const btn = $(SLOT_BTN[slot]);
@@ -756,22 +757,16 @@ function setSlotPreview(slot, dataURL) {
   if (dataURL) {
     const img = document.createElement('img'); img.className = 'prev'; img.src = dataURL;
     const x = document.createElement('button'); x.className = 'clear'; x.textContent = '✕';
-    x.onclick = ev => { ev.stopPropagation();
-      draft.photos[slot] = null; draft.files[slot] = null;
-      setSlotPreview(slot, null); updateNextBtn();
-    };
+    x.onclick = ev => { ev.stopPropagation(); draft.photos[slot] = null; setSlotPreview(slot, null); };
     btn.append(img, x);
   }
 }
-function updateNextBtn() { $('#nextBtn').disabled = !SLOTS.some(s => draft.photos[s]); }
 async function onSlotFile(slot, file) {
-  toast('Processing photo…', 1000);
+  toast('Processing photo…', 900);
   try {
     const { fullBlob, thumb } = await compressPhoto(file);
-    const b64 = await blobToB64(fullBlob);
-    draft.photos[slot] = { fullBlob, thumb, b64 };
-    draft.files[slot] = file;
-    setSlotPreview(slot, thumb); updateNextBtn();
+    draft.photos[slot] = { fullBlob, thumb };
+    setSlotPreview(slot, thumb);
   } catch (e) { toast('Could not read that photo'); }
 }
 function fillNutrition(nu) {
@@ -786,113 +781,40 @@ function nutFromInputs() {
     protein: num($('#nProtein').value), salt: num($('#nSalt').value)
   };
 }
-function renderReviewSummary() {
-  const el = $('#rvInfo'); if (!el) return;
-  const name = $('#fName').value, brand = $('#fBrand').value, cat = $('#fCat').value;
-  const n = nutFromInputs();
-  const rows = NUT_ROWS.filter(([k]) => n[k] !== null && n[k] !== undefined)
-    .map(([k, lb, u]) => `<tr><td>${lb}</td><td>${n[k]} ${u}</td></tr>`).join('');
-  el.innerHTML = `
-    <div class="rvname">${esc(name) || '<span style="color:var(--muted)">Unknown product</span>'}</div>
-    <div class="dbrand">${esc([brand, cat, draft.off ? draft.off.quantity : ''].filter(Boolean).join(' · '))}</div>
-    ${draft.off && draft.off.nutriscore && NS_COLORS[draft.off.nutriscore] ?
-      `<span class="scorepill" style="background:${NS_COLORS[draft.off.nutriscore]}">Nutri-Score ${esc(draft.off.nutriscore)}</span>` : ''}
-    ${rows ? `<table class="nutritable"><tbody>${rows}</tbody></table>` : ''}
-    ${!name ? '<div class="hint">Couldn\u2019t identify it \u2014 tap \u201cEdit details\u201d to fix, or go back for a clearer photo.</div>' : ''}`;
-}
-function renderReviewImages() {
-  $('#rvImgRow').innerHTML = SLOTS.filter(s => draft.photos[s])
-    .map(s => `<img class="rvimg" src="${draft.photos[s].thumb}" alt="">`).join('');
-}
-async function runPipeline() {
-  $('#stepPhotos').hidden = true; $('#stepReview').hidden = false;
-  window.scrollTo(0, 0);
-  renderReviewImages(); renderReviewSummary();
-  if (!draft.barcode) {
-    $('#bcStatus').innerHTML = '<span class="spin"></span> reading barcode…';
-    let code = null;
-    for (const s of ['c', 'b', 'f']) {
-      if (draft.files[s]) { code = await decodeBarcodeFile(draft.files[s]); if (code) break; }
-    }
-    if (code) await applyLookup(code);
-    else $('#bcStatus').innerHTML = draft.files.c ? 'No readable barcode — using AI instead.' : '';
-  }
-  renderReviewSummary();
-  await analyzePhotosAI();
-  renderReviewSummary();
-}
-async function applyLookup(code) {
-  draft.barcode = code;
-  $('#bcStatus').innerHTML = `<span class="code">${esc(code)}</span> <span class="spin"></span> looking up…`;
-  try {
-    const off = await lookupBarcode(code);
-    if (off) {
-      draft.off = off;
-      if (!$('#fName').value) $('#fName').value = off.name;
-      if (!$('#fBrand').value) $('#fBrand').value = off.brand;
-      if (!$('#fCat').value) $('#fCat').value = off.category;
-      fillNutrition(off.nutrition);
-      $('#bcStatus').innerHTML = `<span class="code">${esc(code)}</span> ✓ found: <b>${esc(off.name || 'unnamed product')}</b>`;
-      $('#offHint').textContent = 'Auto-filled from Open Food Facts — edit anything that looks off.';
-      if (!draft.photos.f && !draft.photos.b && !draft.photos.c && off.image) {
-        try {
-          const r = await fetch(off.image);
-          if (r.ok) {
-            const { fullBlob, thumb } = await compressPhoto(await r.blob());
-            draft.photos.f = { fullBlob, thumb, b64: await blobToB64(fullBlob) };
-            renderReviewImages();
-          }
-        } catch (e) {}
-      }
-    } else {
-      $('#bcStatus').innerHTML = `<span class="code">${esc(code)}</span> — not in Open Food Facts.`;
-    }
-  } catch (e) {
-    $('#bcStatus').innerHTML = `<span class="code">${esc(code)}</span> — lookup failed (offline?).`;
-  }
-  renderReviewSummary();
-}
 function startAdd() { resetForm(); showView('add'); }
 function startEdit(id) {
   const it = items.find(i => i.id === id); if (!it) return;
   resetForm();
   editingId = id;
-  draft.status = it.status; draft.barcode = it.barcode || '';
+  draft.status = it.status;
   $('#fName').value = it.name || ''; $('#fBrand').value = it.brand || '';
   $('#fCat').value = it.category || ''; $('#fNotes').value = it.notes || '';
   fillNutrition(it.nutrition);
   $('#vGood').classList.toggle('on', it.status === 'good');
   $('#vBad').classList.toggle('on', it.status === 'bad');
-  if (it.barcode) $('#bcStatus').innerHTML = `<span class="code">${esc(it.barcode)}</span>`;
-  $('#stepPhotos').hidden = true; $('#stepReview').hidden = false;
+  $('#photosCard').hidden = true;
   $('#detailsCard').hidden = false;
   $('#rvImgRow').innerHTML = it.thumb ? `<img class="rvimg" src="${it.thumb}" alt="">` : '';
-  renderReviewSummary();
   $('#saveBtn').textContent = 'Save changes';
-  $('#backBtn').textContent = 'Cancel';
   showView('add');
 }
 async function saveForm() {
-  const name = $('#fName').value.trim();
   const anyPhoto = SLOTS.some(s => draft.photos[s]);
-  if (!draft.status) { toast('Pick Good or Bad'); return; }
-  if (!name && !anyPhoto && !editingId) { toast('Add a photo first'); return; }
-  const now = Date.now();
   const wasEditing = !!editingId;
-  const nutrition = nutFromInputs();
+  if (!draft.status) { toast('Pick Good or Bad'); return; }
+  if (!anyPhoto && !wasEditing) { toast('Add at least one photo'); return; }
+  const now = Date.now();
   let it = wasEditing ? items.find(i => i.id === editingId) : null;
-  if (!it) { it = { id: uid(), createdAt: now, imgs: {} }; items.push(it); }
+  if (!it) { it = { id: uid(), createdAt: now, imgs: {}, nutrition: {} }; items.push(it); }
   const thumb = (draft.photos.f && draft.photos.f.thumb) || (draft.photos.b && draft.photos.b.thumb)
     || (draft.photos.c && draft.photos.c.thumb) || it.thumb || '';
-  Object.assign(it, {
-    name, status: draft.status, barcode: draft.barcode,
-    brand: $('#fBrand').value.trim(), category: $('#fCat').value.trim(),
-    notes: $('#fNotes').value.trim(), nutrition,
-    nutriscore: draft.off ? draft.off.nutriscore : (it.nutriscore || ''),
-    nova: draft.off ? draft.off.nova : (it.nova || null),
-    quantity: draft.off ? draft.off.quantity : (it.quantity || ''),
-    thumb, updatedAt: now
-  });
+  if (wasEditing) {
+    Object.assign(it, {
+      name: $('#fName').value.trim(), brand: $('#fBrand').value.trim(),
+      category: $('#fCat').value.trim(), nutrition: nutFromInputs()
+    });
+  }
+  Object.assign(it, { status: draft.status, notes: $('#fNotes').value.trim(), thumb, updatedAt: now });
   it.imgs = it.imgs || {};
   for (const s of SLOTS) {
     if (draft.photos[s] && draft.photos[s].fullBlob) {
@@ -902,42 +824,21 @@ async function saveForm() {
     }
   }
   it.hasImage = !!(it.imgs.f || it.imgs.b || it.imgs.c || it.hasImage);
+  if (!wasEditing) it.pending = 1;
   await dbSetMeta('imgDirty', [...imgDirty]);
   await dbPutItem(clean(it));
-  toast(wasEditing ? 'Updated' : (draft.status === 'good' ? 'Added to whitelist ✓' : 'Added to blacklist ✕'));
-  resetForm(); showView('list'); queueSync();
+  toast(wasEditing ? 'Updated' : (draft.status === 'good' ? 'Saved to whitelist ✓ — identifying…' : 'Saved to blacklist ✕ — identifying…'));
+  resetForm(); showView('list');
+  queueSync(); processQueue();
+  try { const reg = await navigator.serviceWorker.ready; if ('sync' in reg) await reg.sync.register('fc-enrich'); } catch (e) {}
 }
 
-/* ---------------- AI auto-fill (Anthropic vision) ---------------- */
+/* ---------------- AI providers ---------------- */
 const AI_MODEL = 'claude-haiku-4-5-20251001';
 const AI_PROMPT = 'Identify the grocery product in the photo(s) (package front and/or barcode/nutrition label). Step 1: identify the exact product \u2014 brand and product name as printed. Step 2: nutrition per 100 g: if a nutrition table is visible, read it exactly and set "nutrition_source":"label". If no table is visible, use your knowledge of this specific product (or its closest typical equivalent) to give realistic per-100 g values and set "nutrition_source":"estimate". Reply with ONLY minified JSON, no markdown: {"name":"","brand":"","category":"","quantity":"","barcode":"","nutrition_source":"label|estimate","nutrition":{"kcal":0,"fat":0,"satfat":0,"carbs":0,"sugars":0,"fiber":0,"protein":0,"salt":0}}. Rules: category = 1-2 words like Snacks, Dairy, Beverages; quantity = net weight/volume if visible; barcode = digits only if clearly readable, else ""; only use null for nutrition values you cannot even estimate; if you cannot identify the product at all, set name to your best visual description.';
 const GEMINI_MODEL = 'gemini-flash-latest';
+const GEMINI_FALLBACKS = [GEMINI_MODEL, 'gemini-flash-lite-latest', 'gemini-2.0-flash'];
 
-async function fileToB64Scaled(file, maxW) {
-  const img = await fileToImage(file);
-  const c = drawScaled(img, maxW);
-  return c.toDataURL('image/jpeg', 0.72).split(',')[1];
-}
-function setAiStatus(html) { const el = $('#aiStatus'); if (el) el.innerHTML = html; }
-function fillIfEmpty(sel, val) {
-  const el = $(sel);
-  if (el && !el.value && val !== null && val !== undefined && val !== '') el.value = val;
-}
-function applyAIFill(d) {
-  if (!d || typeof d !== 'object') return;
-  fillIfEmpty('#fName', d.name); fillIfEmpty('#fBrand', d.brand); fillIfEmpty('#fCat', d.category);
-  const n = d.nutrition || {};
-  const map = { kcal: '#nKcal', fat: '#nFat', satfat: '#nSatfat', carbs: '#nCarbs',
-                sugars: '#nSugars', fiber: '#nFiber', protein: '#nProtein', salt: '#nSalt' };
-  for (const [k, sel] of Object.entries(map)) fillIfEmpty(sel, num(n[k]));
-  const srcNote = d.nutrition_source === 'label' ? 'nutrition read from the label'
-    : d.nutrition_source === 'estimate' ? 'nutrition = typical values for this product (estimate)'
-    : 'details filled';
-  setAiStatus('\ud83e\udd16 AI identified: <b>' + esc(d.name || 'product') + '</b> \u2014 ' + srcNote + '. Review, then save.');
-  renderReviewSummary();
-  const bc = String(d.barcode || '').replace(/\D/g, '');
-  if (bc.length >= 8 && draft && !draft.barcode) { applyLookup(bc); }
-}
 function extractJSON(txt) {
   const m = String(txt).match(/\{[\s\S]*\}/);
   if (!m) throw new Error('unreadable AI reply');
@@ -949,10 +850,8 @@ async function callAnthropic(imgs) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      'x-api-key': settings.aiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-      'content-type': 'application/json'
+      'x-api-key': settings.aiKey, 'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true', 'content-type': 'application/json'
     },
     body: JSON.stringify({ model: AI_MODEL, max_tokens: 1000, messages: [{ role: 'user', content }] })
   });
@@ -964,10 +863,10 @@ async function callAnthropic(imgs) {
   const j = await r.json();
   return extractJSON((j.content && j.content[0] && j.content[0].text) || '');
 }
-async function callGemini(imgs) {
+async function callGemini(imgs, model) {
   const parts = imgs.map(b64 => ({ inline_data: { mime_type: 'image/jpeg', data: b64 } }));
   parts.push({ text: AI_PROMPT });
-  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent', {
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': settings.aiKey },
     body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: 2048, responseMimeType: 'application/json' } })
@@ -981,28 +880,121 @@ async function callGemini(imgs) {
   const gparts = (((j.candidates || [])[0] || {}).content || {}).parts || [];
   return extractJSON(gparts.map(p => p.text || '').join(''));
 }
-const scheduleAI = debounce(() => { analyzePhotosAI(); }, 1200);
-async function analyzePhotosAI() {
-  if (!settings.aiKey || !draft || draft.aiBusy) return;
-  const imgs = SLOTS.filter(s => draft.photos && draft.photos[s] && draft.photos[s].b64)
-    .map(s => draft.photos[s].b64);
-  if (!imgs.length) return;
-  draft.aiBusy = true;
-  setAiStatus('<span class="spin"></span> AI reading photos…');
-  try {
-    const isGemini = /^(AIza|AQ[.])/.test(settings.aiKey);
-    let data = null, lastErr = null;
-    for (let attempt = 0; attempt < 2 && !data; attempt++) {
-      try { data = isGemini ? await callGemini(imgs) : await callAnthropic(imgs); }
-      catch (e) { lastErr = e; }
-    }
-    if (!data) throw lastErr;
-    applyAIFill(data);
-  } catch (e) {
-    setAiStatus('AI auto-fill failed: ' + esc(e.message));
-  } finally {
-    draft.aiBusy = false;
+function isTransientErr(msg) {
+  return /(^|[^0-9])(429|500|502|503|504)([^0-9]|$)|overloaded|high demand|unavailable|resource.?exhausted|failed to fetch|network|timeout|unreadable AI reply/i.test(String(msg));
+}
+async function aiIdentify(imgs) {
+  if (!/^(AIza|AQ[.])/.test(settings.aiKey)) return callAnthropic(imgs);
+  let lastErr = null;
+  for (const m of GEMINI_FALLBACKS) {
+    try { return await callGemini(imgs, m); }
+    catch (e) { lastErr = e; if (!isTransientErr(e.message)) throw e; }
   }
+  throw lastErr;
+}
+
+/* ---------------- background enrichment queue ---------------- */
+function fillEmpty(it, k, v) {
+  if ((it[k] === undefined || it[k] === null || it[k] === '') && v !== undefined && v !== null && v !== '') it[k] = v;
+}
+function offToItem(it, off) {
+  fillEmpty(it, 'name', off.name); fillEmpty(it, 'brand', off.brand);
+  fillEmpty(it, 'category', off.category); fillEmpty(it, 'quantity', off.quantity);
+  fillEmpty(it, 'nutriscore', off.nutriscore); if (!it.nova && off.nova) it.nova = off.nova;
+  it.nutrition = it.nutrition || {};
+  for (const k of Object.keys(off.nutrition || {}))
+    if (it.nutrition[k] == null && off.nutrition[k] != null) it.nutrition[k] = off.nutrition[k];
+  it.nutriSource = 'label';
+}
+function aiToItem(it, d) {
+  fillEmpty(it, 'name', d.name); fillEmpty(it, 'brand', d.brand);
+  fillEmpty(it, 'category', d.category); fillEmpty(it, 'quantity', d.quantity);
+  it.nutrition = it.nutrition || {};
+  const n = d.nutrition || {};
+  for (const k of ['kcal', 'fat', 'satfat', 'carbs', 'sugars', 'fiber', 'protein', 'salt'])
+    if (it.nutrition[k] == null && num(n[k]) !== null) it.nutrition[k] = num(n[k]);
+  if (!it.nutriSource) it.nutriSource = d.nutrition_source === 'label' ? 'label' : 'estimate';
+  const bc = String(d.barcode || '').replace(/\D/g, '');
+  if (!it.barcode && bc.length >= 8) it.barcode = bc;
+}
+async function getItemPhotos(it) {
+  const out = [];
+  const meta = it.imgs || (it.hasImage ? { f: 1 } : {});
+  for (const s of SLOTS) {
+    if (!meta[s]) continue;
+    let blob = await dbGetImage(it.id + '-' + s).catch(() => null);
+    if (!blob && s === 'f') blob = await dbGetImage(it.id).catch(() => null);
+    if (!blob && ghConfigured() && navigator.onLine) blob = await fetchRemoteImage(it.id, s).catch(() => null);
+    if (blob) out.push({ slot: s, blob, b64: await blobToB64(blob) });
+  }
+  return out;
+}
+async function enrichItem(it) {
+  const photos = await getItemPhotos(it);
+  if (!photos.length) { it.pending = 0; it.updatedAt = Date.now(); await dbPutItem(clean(it)); return 'done'; }
+  // 1) barcode -> Open Food Facts (exact data, free)
+  try {
+    if (!it.barcode) {
+      const order = { c: 0, b: 1, f: 2 };
+      for (const p of [...photos].sort((a, b2) => order[a.slot] - order[b2.slot])) {
+        const code = await decodeBarcodeFile(p.blob);
+        if (code) { it.barcode = code; break; }
+      }
+    }
+    if (it.barcode && !it.offDone) {
+      const off = await lookupBarcode(it.barcode);
+      if (off) offToItem(it, off);
+      it.offDone = 1;
+    }
+  } catch (e) {}
+  // 2) AI for whatever is still missing
+  const needsAI = !it.name || !it.nutrition || it.nutrition.kcal == null;
+  if (settings.aiKey && needsAI && !it.aiDone) {
+    try {
+      aiToItem(it, await aiIdentify(photos.map(p => p.b64)));
+      it.aiDone = 1;
+    } catch (e) {
+      if (isTransientErr(e.message)) { it.updatedAt = Date.now(); await dbPutItem(clean(it)); return 'retry'; }
+      it.aiDone = 1;
+    }
+  }
+  if (!it.name && !settings.aiKey) {
+    // nothing more possible until logged in — keep queued
+    it.updatedAt = Date.now(); await dbPutItem(clean(it));
+    return 'retry';
+  }
+  it.pending = 0; it.updatedAt = Date.now();
+  await dbPutItem(clean(it));
+  if (it.name && !document.hidden) toast('✓ Identified: ' + it.name);
+  return 'done';
+}
+let enrichBusy = false, enrichFails = 0, enrichTimer = null, enrichAgain = false;
+async function processQueue() {
+  if (enrichBusy) { enrichAgain = true; return; }
+  if (!navigator.onLine) return;
+  const pend = live().filter(i => i.pending);
+  if (!pend.length) { enrichFails = 0; return; }
+  enrichBusy = true;
+  let hitRetry = false;
+  try {
+    for (const it of pend.slice(0, 4)) {
+      const r = await enrichItem(it);
+      if (r === 'retry') { hitRetry = true; break; }
+    }
+  } catch (e) { hitRetry = true; }
+  finally { enrichBusy = false; }
+  renderList();
+  queueSync();
+  const still = live().some(i => i.pending);
+  clearTimeout(enrichTimer);
+  if (enrichAgain) {
+    enrichAgain = false;
+    enrichTimer = setTimeout(processQueue, 150);
+  } else if (still) {
+    if (hitRetry) enrichFails = Math.min(enrichFails + 1, 5); else enrichFails = 0;
+    const delays = [5e3, 3e4, 12e4, 3e5, 9e5, 9e5];
+    enrichTimer = setTimeout(processQueue, delays[hitRetry ? enrichFails : 0]);
+  } else enrichFails = 0;
 }
 
 /* ---------------- one-password login (encrypted key bundle) ---------------- */
@@ -1052,6 +1044,7 @@ async function tryUnlock() {
     $('#lock').hidden = true;
     toast('Device set up ✓ — syncing…');
     syncNow(true);
+    setTimeout(processQueue, 1500);
   } catch (e) {
     $('#lockerr').textContent = 'Wrong password — try again.';
   } finally {
@@ -1175,6 +1168,7 @@ async function syncNow(auto) {
     setSyncUI('ok', 'Synced');
     if (!auto) toast('Synced ✓');
     renderList();
+    setTimeout(processQueue, 500);
   } catch (e) {
     setSyncUI('err', 'Sync error');
     if (!auto) toast('Sync failed: ' + e.message, 4000);
@@ -1304,12 +1298,7 @@ function bindEvents() {
       if (f) onSlotFile(s, f);
     });
   }
-  $('#nextBtn').onclick = runPipeline;
-  $('#editToggle').onclick = () => { $('#detailsCard').hidden = !$('#detailsCard').hidden; };
-  $('#backBtn').onclick = () => {
-    if (editingId) { resetForm(); showView('list'); }
-    else { $('#stepReview').hidden = true; $('#stepPhotos').hidden = false; }
-  };
+  $('#backBtn').onclick = () => { resetForm(); showView('list'); };
   $('#vGood').onclick = () => { draft.status = 'good'; $('#vGood').classList.add('on'); $('#vBad').classList.remove('on'); };
   $('#vBad').onclick = () => { draft.status = 'bad'; $('#vBad').classList.add('on'); $('#vGood').classList.remove('on'); };
   $('#saveBtn').onclick = saveForm;
@@ -1334,13 +1323,14 @@ function bindEvents() {
     settings.aiKey = $('#sAiKey').value.trim();
     await dbSetMeta('settings', { ...settings });
     toast(settings.aiKey ? 'AI key saved \u2014 photo auto-fill is on' : 'AI key removed');
+    processQueue();
   };
   $('#sCacheImgs').onclick = cacheAllImages;
   $('#expBtn').onclick = exportJSON;
   $('#impBtn').onclick = () => $('#impInput').click();
   $('#impInput').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) importJSON(f); };
 
-  window.addEventListener('online', () => queueSync());
+  window.addEventListener('online', () => { queueSync(); processQueue(); });
 }
 
 /* ---------------- init ---------------- */
@@ -1357,6 +1347,11 @@ async function init() {
   showView('list');
   if (ghConfigured() && navigator.onLine) syncNow(true);
   maybeShowLock();
+  processQueue();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) processQueue(); });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data && e.data.type === 'process-queue') processQueue();
+  });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
@@ -1365,7 +1360,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches, applyAIFill, fillIfEmpty, renderReviewSummary, onSlotFile, encryptBundle, decryptBundle,
+  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify,
   state: () => ({ items, settings, filter }),
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
