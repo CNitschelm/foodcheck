@@ -911,7 +911,7 @@ async function saveForm() {
 /* ---------------- AI auto-fill (Anthropic vision) ---------------- */
 const AI_MODEL = 'claude-haiku-4-5-20251001';
 const AI_PROMPT = 'Identify the grocery product in the photo(s) (package front and/or barcode/nutrition label). Step 1: identify the exact product \u2014 brand and product name as printed. Step 2: nutrition per 100 g: if a nutrition table is visible, read it exactly and set "nutrition_source":"label". If no table is visible, use your knowledge of this specific product (or its closest typical equivalent) to give realistic per-100 g values and set "nutrition_source":"estimate". Reply with ONLY minified JSON, no markdown: {"name":"","brand":"","category":"","quantity":"","barcode":"","nutrition_source":"label|estimate","nutrition":{"kcal":0,"fat":0,"satfat":0,"carbs":0,"sugars":0,"fiber":0,"protein":0,"salt":0}}. Rules: category = 1-2 words like Snacks, Dairy, Beverages; quantity = net weight/volume if visible; barcode = digits only if clearly readable, else ""; only use null for nutrition values you cannot even estimate; if you cannot identify the product at all, set name to your best visual description.';
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-flash-latest';
 
 async function fileToB64Scaled(file, maxW) {
   const img = await fileToImage(file);
