@@ -365,18 +365,18 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
     </div>
     </div>
     <div class="formcard">
-      <h3>Backup</h3>
+      <h3>Backup file</h3>
       <div style="display:flex;gap:8px">
-        <button class="btn sm ghost" id="expBtn">Export JSON</button>
-        <button class="btn sm ghost" id="impBtn">Import JSON</button>
+        <button class="btn sm ghost" id="expBtn">Download backup</button>
+        <button class="btn sm ghost" id="impBtn">Restore backup</button>
         <input type="file" accept="application/json,.json" id="impInput" hidden>
       </div>
-      <div class="hint">Export includes photos. Use it to move data between devices manually if you don't set up sync.</div>
+      <div class="hint">Everything already backs up online automatically — this is just an extra manual copy (photos included).</div>
     </div>
     <div class="formcard">
       <h3>About</h3>
       <div class="hint" id="statsLine"></div>
-      <div class="hint">FoodCheck — personal good/bad grocery database. Nutrition data via Open Food Facts.</div>
+      <div class="hint">FoodCheck 🛒 — your personal good/bad grocery list. Product data from Open Food Facts.</div>
     </div>
   </section>
 </main>
@@ -1186,14 +1186,17 @@ async function syncNow(auto) {
 /* ---------------- settings ---------------- */
 function renderSettings() {
   $('#adminZone').hidden = (location.hash !== '#admin');
-  $('#acctStatus').textContent = (ghConfigured() || settings.aiKey)
-    ? 'Logged in on this device — sync and AI auto-fill are active.'
-    : 'Not set up on this device yet. Log in once with your password.';
+  const loggedIn = !!(ghConfigured() || settings.aiKey);
+  $('#acctStatus').textContent = loggedIn
+    ? '\u2713 Logged in \u2014 your items and photos back up automatically.'
+    : 'Not logged in on this device. Enter your password to connect.';
+  $('#loginBtn').hidden = loggedIn;
+  $('#logoutBtn').hidden = !loggedIn;
   $('#sRepo').value = settings.repo; $('#sToken').value = settings.token; $('#sBranch').value = settings.branch || 'main';
   $('#sAiKey').value = settings.aiKey || '';
   const g = live().filter(i => i.status === 'good').length;
   const b = live().filter(i => i.status === 'bad').length;
-  $('#statsLine').textContent = `${live().length} items (${g} good, ${b} bad) stored on this device.`;
+  $('#statsLine').textContent = `${live().length} items \u2014 ${g} good, ${b} bad.`;
   dbGetMeta('lastSync').then(t => {
     $('#sStatus').textContent = t ? 'Last sync: ' + new Date(t).toLocaleString() : (ghConfigured() ? '' : 'Sync not configured.');
   }).catch(() => {});
