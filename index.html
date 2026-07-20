@@ -320,6 +320,17 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
   <!-- ============ SETTINGS ============ -->
   <section id="view-settings" hidden>
     <div class="formcard">
+      <h3>Account</h3>
+      <div class="stack">
+        <div class="hint" id="acctStatus"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn sm" id="loginBtn">Log in with password</button>
+          <button class="btn sm ghost" id="logoutBtn">Log out of this device</button>
+        </div>
+      </div>
+    </div>
+    <div id="adminZone" hidden>
+    <div class="formcard">
       <h3>GitHub sync (cross-device)</h3>
       <div class="stack">
         <div class="field"><label>Data repo (owner/name — private repo recommended)</label>
@@ -351,6 +362,7 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
         <textarea id="bundleOut" hidden readonly style="font-size:11px;min-height:90px;font-family:ui-monospace,monospace"></textarea>
         <div class="hint">Encrypts this device's keys (sync token + AI key) with a password you choose. Once the bundle is published as <code>config.enc</code> in the app repo, any new device just asks for that password — no key pasting. Keys are never public in plain text (AES-256, PBKDF2).</div>
       </div>
+    </div>
     </div>
     <div class="formcard">
       <h3>Backup</h3>
@@ -1040,19 +1052,19 @@ async function tryUnlock() {
     $('#lockbtn').disabled = false; $('#lockbtn').textContent = 'Unlock';
   }
 }
-async function maybeShowLock() {
-  if (ghConfigured() || settings.aiKey) return;
+async function maybeShowLock(force) {
+  if (!force && (ghConfigured() || settings.aiKey)) return;
   try {
     const r = await fetch(CONFIG_PATH + '?_=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) return;
     const text = await r.text();
     let j = null;
-    try { j = JSON.parse(text); } catch (e) { return; }
-    if (!j || j.v !== 1 || j.kdf !== 'PBKDF2-SHA256' || !j.salt || !j.iv || !j.data) return;
+    try { j = JSON.parse(text); } catch (e) { if (force) toast('No password login published yet'); return; }
+    if (!j || j.v !== 1 || j.kdf !== 'PBKDF2-SHA256' || !j.salt || !j.iv || !j.data) { if (force) toast('No password login published yet'); return; }
     lockBundleText = text;
     $('#lock').hidden = false;
     setTimeout(() => { const el = $('#lockpw'); if (el) el.focus(); }, 60);
-  } catch (e) {}
+  } catch (e) { if (force) toast('Could not check for login config (offline?)'); }
 }
 
 /* ---------------- GitHub sync ---------------- */
@@ -1167,6 +1179,10 @@ async function syncNow(auto) {
 
 /* ---------------- settings ---------------- */
 function renderSettings() {
+  $('#adminZone').hidden = (location.hash !== '#admin');
+  $('#acctStatus').textContent = (ghConfigured() || settings.aiKey)
+    ? 'Logged in on this device — sync and AI auto-fill are active.'
+    : 'Not set up on this device yet. Log in once with your password.';
   $('#sRepo').value = settings.repo; $('#sToken').value = settings.token; $('#sBranch').value = settings.branch || 'main';
   $('#sAiKey').value = settings.aiKey || '';
   const g = live().filter(i => i.status === 'good').length;
@@ -1294,6 +1310,17 @@ function bindEvents() {
   $('#lockbtn').onclick = tryUnlock;
   $('#lockpw').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
   $('#lockskip').onclick = () => { $('#lock').hidden = true; };
+  $('#loginBtn').onclick = () => {
+    if (ghConfigured() || settings.aiKey) { toast('Already logged in on this device'); return; }
+    maybeShowLock(true);
+  };
+  $('#logoutBtn').onclick = async () => {
+    if (!confirm('Log out? This removes sync + AI access from this device (your items stay).')) return;
+    settings = { repo: '', token: '', branch: 'main', aiKey: '' };
+    await dbSetMeta('settings', { ...settings });
+    renderSettings(); toast('Logged out of this device');
+  };
+  window.addEventListener('hashchange', () => { if (!$('#view-settings').hidden) renderSettings(); });
   $('#sAiSave').onclick = async () => {
     settings.aiKey = $('#sAiKey').value.trim();
     await dbSetMeta('settings', { ...settings });
