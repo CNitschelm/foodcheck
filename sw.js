@@ -1,5 +1,5 @@
 /* FoodCheck service worker — offline app shell */
-const VERSION = 'foodcheck-v15';
+const VERSION = 'foodcheck-v16';
 const PRECACHE = [
   './',
   './index.html',
@@ -37,7 +37,18 @@ self.addEventListener('fetch', e => {
   // config bundle must always be fresh
   if (url.origin === location.origin && url.pathname.endsWith('config.enc')) return;
 
-  // app shell + CDN libs: cache-first, refresh in background
+  // app shell (page itself): network-first so updates arrive on next open
+  if (url.origin === location.origin && (e.request.mode === 'navigate' || url.pathname.endsWith('/index.html'))) {
+    e.respondWith(
+      fetch(e.request).then(resp => {
+        if (resp && resp.ok) { const copy = resp.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
+        return resp;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // other assets + CDN libs: cache-first, refresh in background
   if (url.origin === location.origin || url.hostname === 'cdn.jsdelivr.net') {
     e.respondWith(
       caches.match(e.request).then(cached => {
