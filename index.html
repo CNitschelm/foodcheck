@@ -211,6 +211,16 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
   width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-size:27px;margin-top:-6px;box-shadow:0 6px 16px rgba(22,163,74,.4)}
 
+#imgChooser{position:fixed;inset:0;z-index:90;background:rgba(8,10,14,.55);display:flex;
+  align-items:center;justify-content:center;padding:20px;
+  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+#imgChooser[hidden]{display:none!important}
+.chbox{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;
+  width:min(92vw,400px);box-shadow:var(--shadow-lg)}
+.cmpgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.cmpcol{display:flex;flex-direction:column;gap:8px}
+.cmpcol img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
+
 #toast{position:fixed;bottom:calc(var(--nav-h) + 20px + env(safe-area-inset-bottom));
   left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);
   padding:11px 20px;border-radius:999px;font-size:14px;font-weight:550;opacity:0;transition:.22s;
@@ -380,6 +390,16 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
   <button id="navSettings"><span class="nico">⚙️</span>Settings</button>
 </nav>
 
+<div id="imgChooser" hidden><div class="chbox">
+  <h3 style="margin:0 0 4px;font-size:18px">New photo found</h3>
+  <div class="hint" id="chName" style="margin-top:0"></div>
+  <div class="cmpgrid">
+    <div class="cmpcol"><div class="hint" style="margin:0;text-align:center">Your photo</div><img id="chImgCur" alt=""><button class="btn sm ghost" id="chKeep">Keep mine</button></div>
+    <div class="cmpcol"><div class="hint" style="margin:0;text-align:center">Found online</div><img id="chImgNew" alt=""><button class="btn sm" id="chUse">Use this</button></div>
+  </div>
+  <button class="btn sm ghost" id="chLater" style="margin-top:12px;width:100%">Decide later</button>
+</div></div>
+
 <div id="toast"></div>
 <script>
 /* =================================================================
@@ -458,6 +478,7 @@ function drawScaled(img, maxW, rotDeg = 0) {
 }
 /* full-size blob (max 1000px) + small thumb dataURL (max 240px) */
 async function compressPhoto(file) {
+  if (window.__TEST_THUMB) return { fullBlob: new Blob(['t'], { type: 'image/jpeg' }), thumb: window.__TEST_THUMB };
   const img = await fileToImage(file);
   const full = drawScaled(img, 1000);
   const th = drawScaled(img, 240);
@@ -589,8 +610,16 @@ async function openDetail(id) {
   const it = items.find(i => i.id === id);
   if (!it) return;
   const n = it.nutrition || {};
-  const nutRows = NUT_ROWS.filter(([k]) => n[k] !== null && n[k] !== undefined)
+  let nutRows = NUT_ROWS.filter(([k]) => n[k] !== null && n[k] !== undefined)
     .map(([k, lb, u]) => `<tr><td>${lb}</td><td>${n[k]} ${u}</td></tr>`).join('');
+  if (n.protein != null && n.kcal) {
+    nutRows += `<tr><td><b>Protein per 100 kcal</b></td><td><b>${(n.protein / n.kcal * 100).toFixed(1)} g</b></td></tr>`;
+  }
+  const qm = String(it.quantity || '').match(/([\d.]+)\s*(g|กรัม|ml|มล)/i);
+  if (qm && n.kcal != null) {
+    const W = parseFloat(qm[1]);
+    if (W > 0 && W < 2000) nutRows += `<tr><td><b>Whole pack (${esc(it.quantity)})</b></td><td><b>≈ ${Math.round(n.kcal * W / 100)} kcal</b></td></tr>`;
+  }
   $('#sheetBody').innerHTML = `
     <div id="dImgWrap"></div>
     <div class="dtitle">${esc(it.name) || '(no name)'}</div>
@@ -604,11 +633,13 @@ async function openDetail(id) {
       <button class="vbtn bad ${it.status === 'bad' ? 'on' : ''}" id="dBad">✕ Bad</button>
     </div>
     ${it.notes ? `<div class="dnotes">${esc(it.notes)}</div>` : ''}
-    ${nutRows ? `<table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
+    ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
     <div class="dmeta">${it.barcode ? 'Barcode ' + esc(it.barcode) + ' · ' : ''}Added ${new Date(it.createdAt).toLocaleDateString()}</div>
     ${it.pending ? '<div class="hint">🤖 Identifying in the background — details fill in automatically.</div>' : ''}
+    ${it.suggestWanted ? '<div class="hint">🔎 Searching online for a better photo…</div>' : ''}
+    <button class="btn ghost" id="dImgSuggest" style="width:100%;margin-top:12px">${it.suggestReady ? '🖼️ Choose new photo' : '🖼️ Find a better photo online'}</button>
     <div class="drow">
-      ${(it.pending || !it.name) ? '<button class="btn ghost" id="dIdentify">↻ Identify now</button>' : ''}
+      <button class="btn ghost" id="dIdentify">↻ Identify again</button>
       <button class="btn ghost" id="dEdit">Edit</button>
       <button class="btn danger" id="dDelete">Delete</button>
     </div>`;
@@ -646,10 +677,22 @@ async function openDetail(id) {
     wrap.insertBefore(img, thumbsRow);
   }
 
+  const sgBtn = $('#dImgSuggest');
+  if (sgBtn) sgBtn.onclick = async () => {
+    if (it.suggestReady) { closeSheet(); openChooser(it.id); return; }
+    if (it.suggestWanted) { toast('Already searching — check back soon'); return; }
+    clearSuggest(it);
+    it.suggestWanted = 1; it.updatedAt = Date.now();
+    await dbPutItem(clean(it));
+    toast('Looking for a better photo in the background 🔎');
+    openDetail(it.id);
+    processQueue();
+  };
   const idBtn = $('#dIdentify');
   if (idBtn) idBtn.onclick = async () => {
     idBtn.disabled = true; idBtn.textContent = 'Identifying…';
-    it.pending = 1; it.aiDone = 0;
+    it.pending = 1; it.aiDone = 0; it.offDone = 0;
+    it.nutrition = {}; delete it.nutriSource;
     try { await enrichItem(it); } catch (e) {}
     renderList(); queueSync(); openDetail(it.id);
   };
@@ -849,7 +892,7 @@ async function saveForm() {
 
 /* ---------------- AI providers ---------------- */
 const AI_MODEL = 'claude-haiku-4-5-20251001';
-const AI_PROMPT = 'Identify the grocery product in the photo(s) (package front and/or barcode/nutrition label). Step 1: identify the exact product \u2014 brand and product name as printed. Step 2: nutrition per 100 g: if a nutrition table is visible, read it exactly and set "nutrition_source":"label". If no table is visible, use your knowledge of this specific product (or its closest typical equivalent) to give realistic per-100 g values and set "nutrition_source":"estimate". Reply with ONLY minified JSON, no markdown: {"name":"","brand":"","category":"","quantity":"","barcode":"","nutrition_source":"label|estimate","nutrition":{"kcal":0,"fat":0,"satfat":0,"carbs":0,"sugars":0,"fiber":0,"protein":0,"salt":0}}. Rules: category = 1-2 words like Snacks, Dairy, Beverages; quantity = net weight/volume if visible; barcode = digits only if clearly readable, else ""; only use null for nutrition values you cannot even estimate; if you cannot identify the product at all, set name to your best visual description.';
+const AI_PROMPT = 'Identify the grocery product in the photo(s) (package front and/or barcode/nutrition label). Step 1: identify the exact product \u2014 brand and product name as printed. Step 2: nutrition values STRICTLY per 100 g (per 100 ml for drinks). Labels often print per serving or per package \u2014 you MUST convert to per 100 g using the printed serving size or net weight (example: values for a 50 g bag \u00d7 2 = per 100 g). Set "nutrition_source":"label" only if values are read directly from, or correctly converted from, a visible label. If no label or no conversion basis is visible, use your knowledge of this exact product for typical per-100 g values and set "nutrition_source":"estimate". Reply with ONLY minified JSON, no markdown: {"name":"","brand":"","category":"","quantity":"","barcode":"","nutrition_source":"label|estimate","nutrition":{"kcal":0,"fat":0,"satfat":0,"carbs":0,"sugars":0,"fiber":0,"protein":0,"salt":0}}. Rules: category = 1-2 words like Snacks, Dairy, Beverages; quantity = net weight/volume if visible; barcode = digits only if clearly readable, else ""; only use null for values you cannot even estimate; never output per-serving or per-package numbers. CAUTION: many labels (especially Thai) state several servings per package \u2014 per-serving values \u00d7 servings-per-pack = whole pack, then \u00f7 net weight \u00d7 100 = per 100 g. Sanity-check your result against typical values (dry snacks/chips \u2248 350-600 kcal per 100 g, drinks usually < 100): if your number looks like half or double the typical value, re-check the serving math.';
 const GEMINI_MODEL = 'gemini-flash-latest';
 const GEMINI_FALLBACKS = [GEMINI_MODEL, 'gemini-flash-lite-latest', 'gemini-2.0-flash'];
 
@@ -982,6 +1025,84 @@ async function enrichItem(it) {
   if (it.name && !document.hidden) toast('✓ Identified: ' + it.name);
   return 'done';
 }
+/* ---------------- better-photo suggestions ---------------- */
+let chooserId = null;
+const chooserSnoozed = new Set();
+function clearSuggest(it) {
+  delete it.suggestUrl; delete it.suggestThumb; delete it.suggestReady;
+  delete it.suggestWanted; delete it.suggestNone;
+}
+async function findBetterImage(it) {
+  let url = null;
+  if (it.barcode) {
+    try { const off = await lookupBarcode(it.barcode); if (off && off.image) url = off.image; } catch (e) {}
+  }
+  if (!url && (it.name || it.brand)) {
+    try {
+      const q = encodeURIComponent([it.brand, it.name].filter(Boolean).join(' ').slice(0, 80));
+      const r = await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + q + '&search_simple=1&action=process&json=1&page_size=5&fields=product_name,brands,image_front_url,image_front_small_url');
+      if (r.ok) {
+        const j = await r.json();
+        const p = (j.products || []).find(x => x.image_front_url || x.image_front_small_url);
+        if (p) url = p.image_front_url || p.image_front_small_url;
+      }
+    } catch (e) {}
+  }
+  if (!url) {
+    it.suggestWanted = 0; it.suggestNone = 1;
+    if (!document.hidden) toast('No better photo found online for this item');
+  } else {
+    const r2 = await fetch(url);
+    if (!r2.ok) throw new Error('image download failed');
+    const { thumb } = await compressPhoto(await r2.blob());
+    it.suggestUrl = url; it.suggestThumb = thumb; it.suggestReady = 1; it.suggestWanted = 0;
+    if (!document.hidden) toast('🖼️ Found a photo suggestion — check ' + (it.name || 'the item'));
+  }
+  it.updatedAt = Date.now();
+  await dbPutItem(clean(it));
+}
+async function acceptSuggestion(it) {
+  try {
+    const r = await fetch(it.suggestUrl);
+    if (!r.ok) throw new Error('download failed');
+    const { fullBlob, thumb } = await compressPhoto(await r.blob());
+    await dbPutImage(it.id + '-f', fullBlob);
+    it.imgs = it.imgs || {}; it.imgs.f = 1; it.hasImage = true;
+    it.thumb = thumb;
+    imgDirty.add(it.id + '-f'); await dbSetMeta('imgDirty', [...imgDirty]);
+  } catch (e) { toast('Could not download the new photo — kept yours'); }
+  clearSuggest(it);
+  it.updatedAt = Date.now();
+  await dbPutItem(clean(it));
+  renderList(); queueSync();
+}
+async function declineSuggestion(it) {
+  clearSuggest(it);
+  it.updatedAt = Date.now();
+  await dbPutItem(clean(it));
+  renderList(); queueSync();
+}
+function openChooser(id) {
+  const it = items.find(i => i.id === id);
+  if (!it || !it.suggestReady) return;
+  chooserId = id;
+  $('#chName').textContent = it.name || 'Unnamed item';
+  $('#chImgCur').src = it.thumb || '';
+  $('#chImgNew').src = it.suggestThumb || '';
+  $('#imgChooser').hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+function closeChooser() {
+  $('#imgChooser').hidden = true;
+  chooserId = null;
+  document.body.style.overflow = '';
+}
+function maybeShowChooser() {
+  if (!$('#imgChooser').hidden || !$('#lock').hidden) return;
+  const it = live().find(i => i.suggestReady && !chooserSnoozed.has(i.id));
+  if (it) openChooser(it.id);
+}
+
 let enrichBusy = false, enrichFails = 0, enrichTimer = null, enrichAgain = false;
 async function processQueue() {
   if (enrichBusy) { enrichAgain = true; return; }
@@ -994,6 +1115,10 @@ async function processQueue() {
     for (const it of pend.slice(0, 4)) {
       const r = await enrichItem(it);
       if (r === 'retry') { hitRetry = true; break; }
+    }
+    const wants = live().filter(i => i.suggestWanted && !i.suggestReady);
+    for (const it of wants.slice(0, 2)) {
+      try { await findBetterImage(it); } catch (e) {}
     }
   } catch (e) { hitRetry = true; }
   finally { enrichBusy = false; }
@@ -1377,6 +1502,23 @@ function bindEvents() {
   $('#impInput').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) importJSON(f); };
 
   window.addEventListener('online', () => { queueSync(); processQueue(); });
+  $('#chUse').onclick = async () => {
+    const it = items.find(i => i.id === chooserId);
+    closeChooser();
+    if (it) { toast('Updating photo…', 1200); await acceptSuggestion(it); }
+    setTimeout(maybeShowChooser, 400);
+  };
+  $('#chKeep').onclick = async () => {
+    const it = items.find(i => i.id === chooserId);
+    closeChooser();
+    if (it) await declineSuggestion(it);
+    setTimeout(maybeShowChooser, 400);
+  };
+  $('#chLater').onclick = () => {
+    if (chooserId) chooserSnoozed.add(chooserId);
+    closeChooser();
+    setTimeout(maybeShowChooser, 400);
+  };
 }
 
 /* ---------------- init ---------------- */
@@ -1394,6 +1536,7 @@ async function init() {
   if (ghConfigured() && navigator.onLine) syncNow(true);
   maybeShowLock();
   processQueue();
+  setTimeout(maybeShowChooser, 1500);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) processQueue(); });
   if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => {
     if (e.data && e.data.type === 'process-queue') processQueue();
@@ -1406,7 +1549,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify,
+  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser,
   state: () => ({ items, settings, filter }),
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
