@@ -1030,7 +1030,7 @@ let chooserId = null;
 const chooserSnoozed = new Set();
 function clearSuggest(it) {
   delete it.suggestUrl; delete it.suggestThumb; delete it.suggestReady;
-  delete it.suggestWanted; delete it.suggestNone;
+  delete it.suggestWanted; delete it.suggestNone; delete it.suggestTries;
 }
 async function findBetterImage(it) {
   let url = null;
@@ -1108,7 +1108,8 @@ async function processQueue() {
   if (enrichBusy) { enrichAgain = true; return; }
   if (!navigator.onLine) return;
   const pend = live().filter(i => i.pending);
-  if (!pend.length) { enrichFails = 0; return; }
+  const wantsPhoto = live().filter(i => i.suggestWanted && !i.suggestReady);
+  if (!pend.length && !wantsPhoto.length) { enrichFails = 0; return; }
   enrichBusy = true;
   let hitRetry = false;
   try {
@@ -1116,15 +1117,22 @@ async function processQueue() {
       const r = await enrichItem(it);
       if (r === 'retry') { hitRetry = true; break; }
     }
-    const wants = live().filter(i => i.suggestWanted && !i.suggestReady);
-    for (const it of wants.slice(0, 2)) {
-      try { await findBetterImage(it); } catch (e) {}
+    for (const it of wantsPhoto.slice(0, 2)) {
+      try { await findBetterImage(it); }
+      catch (e) {
+        it.suggestTries = (it.suggestTries || 0) + 1;
+        if (it.suggestTries >= 3) {
+          it.suggestWanted = 0; it.suggestNone = 1;
+          if (!document.hidden) toast('Couldn’t fetch a photo for ' + (it.name || 'that item'));
+        }
+        it.updatedAt = Date.now(); await dbPutItem(clean(it));
+      }
     }
   } catch (e) { hitRetry = true; }
   finally { enrichBusy = false; }
   renderList();
   queueSync();
-  const still = live().some(i => i.pending);
+  const still = live().some(i => i.pending) || live().some(i => i.suggestWanted && !i.suggestReady);
   clearTimeout(enrichTimer);
   if (enrichAgain) {
     enrichAgain = false;
