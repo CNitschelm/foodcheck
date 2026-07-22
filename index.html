@@ -211,16 +211,27 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
   width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-size:27px;margin-top:-6px;box-shadow:0 6px 16px rgba(22,163,74,.4)}
 
-#imgChooser{position:fixed;inset:0;z-index:90;background:rgba(8,10,14,.55);display:flex;
-  align-items:center;justify-content:center;padding:20px;
-  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+#imgChooser{position:fixed;inset:0;z-index:90;background:rgba(8,10,14,.72);display:flex;
+  align-items:center;justify-content:center;padding:14px;
+  -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 #imgChooser[hidden]{display:none!important}
-.chbox{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;
-  width:min(92vw,400px);box-shadow:var(--shadow-lg)}
-.cmpgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-.cmpcol{display:flex;flex-direction:column;gap:8px}
-.cmpcol img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
+.chbox{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px 16px;
+  width:min(94vw,440px);max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.cmpstack{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.cmprow{position:relative}
+.cmplbl{font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:5px}
+.cmprow img{width:100%;height:42vh;object-fit:contain;background:var(--bg);
+  border-radius:14px;border:1px solid var(--line)}
+.tapzoom{position:absolute;bottom:8px;right:10px;font-size:10.5px;color:#fff;
+  background:rgba(0,0,0,.55);padding:3px 8px;border-radius:999px}
+.chbtns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.chbtns #chUse{background:linear-gradient(135deg,var(--good),var(--good-2));color:#fff}
+#imgZoom{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.92);display:flex;
+  align-items:center;justify-content:center;padding:12px}
+#imgZoom[hidden]{display:none!important}
+#imgZoom img{max-width:100%;max-height:100%;object-fit:contain}
 
+#toast{position:fixed;
 #toast{position:fixed;bottom:calc(var(--nav-h) + 20px + env(safe-area-inset-bottom));
   left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);
   padding:11px 20px;border-radius:999px;font-size:14px;font-weight:550;opacity:0;transition:.22s;
@@ -391,15 +402,21 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
 </nav>
 
 <div id="imgChooser" hidden><div class="chbox">
-  <h3 style="margin:0 0 4px;font-size:18px">New photo found</h3>
+  <h3 style="margin:0 0 2px;font-size:19px">Pick the better photo</h3>
   <div class="hint" id="chName" style="margin-top:0"></div>
-  <div class="cmpgrid">
-    <div class="cmpcol"><div class="hint" style="margin:0;text-align:center">Your photo</div><img id="chImgCur" alt=""><button class="btn sm ghost" id="chKeep">Keep mine</button></div>
-    <div class="cmpcol"><div class="hint" style="margin:0;text-align:center">Suggested</div><img id="chImgNew" alt=""><button class="btn sm" id="chUse">Use this</button></div>
+  <div class="cmpstack">
+    <div class="cmprow"><div class="cmplbl">📷 Your photo</div><img id="chImgCur" alt="" data-side="cur"><span class="tapzoom">tap to enlarge</span></div>
+    <div class="cmprow"><div class="cmplbl">✨ Suggested</div><img id="chImgNew" alt="" data-side="new"><span class="tapzoom">tap to enlarge</span></div>
   </div>
   <div class="hint" id="chSource" style="text-align:center;margin-top:8px"></div>
-  <button class="btn sm ghost" id="chLater" style="margin-top:10px;width:100%">Decide later</button>
+  <div class="chbtns">
+    <button class="btn ghost" id="chKeep">Keep mine</button>
+    <button class="btn" id="chUse">Use suggested</button>
+  </div>
+  <button class="btn sm ghost" id="chLater" style="margin-top:10px;width:100%;opacity:.7">Decide later</button>
 </div></div>
+
+<div id="imgZoom" hidden><img id="zoomImg" alt=""></div>
 
 <div id="toast"></div>
 <script>
@@ -637,9 +654,13 @@ async function openDetail(id) {
     ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
     <div class="dmeta">${it.barcode ? 'Barcode ' + esc(it.barcode) + ' · ' : ''}Added ${new Date(it.createdAt).toLocaleDateString()}</div>
     ${it.pending ? '<div class="hint">🤖 Identifying in the background — details fill in automatically.</div>' : ''}
-    ${it.suggestWanted ? '<div class="hint">🔎 Looking for a better photo…</div>' : ''}
-    ${it.suggestNone ? '<div class="hint">No online photo exists for this product yet.</div>' : ''}
-    <button class="btn ghost" id="dImgSuggest" style="width:100%;margin-top:12px">${it.suggestReady ? '🖼️ Choose new photo' : '🖼️ Find a better photo online'}</button>
+    ${it.suggestWanted ? '<div class="hint">🔎 Searching the web for a better photo…</div>' : ''}
+    <button class="btn ghost" id="dImgSuggest" style="width:100%;margin-top:12px"${it.suggestWanted ? ' disabled' : ''}>${
+      it.suggestWanted ? '🔎 Searching…'
+      : it.suggestReady ? '🖼️ Choose new photo'
+      : it.suggestNone ? '✓ Checked — no web match · search again'
+      : it.suggestChecked ? '✓ Photo checked · look again'
+      : '🔍 Find a better photo on the web'}</button>
     <div class="drow">
       <button class="btn ghost" id="dIdentify">↻ Identify again</button>
       <button class="btn ghost" id="dEdit">Edit</button>
@@ -683,10 +704,10 @@ async function openDetail(id) {
   if (sgBtn) sgBtn.onclick = async () => {
     if (it.suggestReady) { closeSheet(); openChooser(it.id); return; }
     if (it.suggestWanted) { toast('Already searching — check back soon'); return; }
-    clearSuggest(it);
+    clearSuggest(it); delete it.suggestChecked;
     it.suggestWanted = 1; it.updatedAt = Date.now();
     await dbPutItem(clean(it));
-    toast('Looking for a better photo in the background 🔎');
+    toast('Searching the web for a better photo 🔎');
     openDetail(it.id);
     processQueue();
   };
@@ -771,6 +792,7 @@ async function decodeBarcodeFile(file) {
 }
 
 /* ---------------- Open Food Facts ---------------- */
+function bigOFF(u) { return u ? u.replace(/\.(\d+)\.jpg$/i, '.full.jpg') : u; }
 async function lookupBarcode(code) {
   const fields = 'product_name,brands,nutriments,nutriscore_grade,nova_group,image_front_small_url,image_front_url,categories,quantity';
   const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${fields}`);
@@ -783,7 +805,7 @@ async function lookupBarcode(code) {
     name: p.product_name || '', brand: p.brands || '',
     category: cats.length ? cats[cats.length - 1] : '', quantity: p.quantity || '',
     nutriscore: (p.nutriscore_grade || '').toLowerCase(), nova: p.nova_group || null,
-    image: p.image_front_small_url || p.image_front_url || '',
+    image: bigOFF(p.image_front_url) || p.image_front_url || p.image_front_small_url || '',
     nutrition: {
       kcal: num(n['energy-kcal_100g']), fat: num(n.fat_100g), satfat: num(n['saturated-fat_100g']),
       carbs: num(n.carbohydrates_100g), sugars: num(n.sugars_100g), fiber: num(n.fiber_100g),
@@ -1030,34 +1052,32 @@ async function enrichItem(it) {
 /* ---------------- better-photo suggestions ---------------- */
 let chooserId = null;
 const chooserSnoozed = new Set();
-const STOPWORDS = ['the','and','with','for','original','flavor','flavour','flavored','snack','snacks','pack','size','new'];
+const STOPWORDS = ['the','and','with','for','original','flavor','flavour','flavored','snack','snacks','pack','size','new','file','jpg','jpeg','png'];
 function tokenize(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9\u0e00-\u0e7f ]+/g, ' ')
     .split(/\s+/).filter(t => t.length > 2 && !STOPWORDS.includes(t));
 }
-function looksRelevant(item, cand) {
+function relevant(item, textParts) {
   const mine = new Set([...tokenize(item.name), ...tokenize(item.brand)]);
   if (!mine.size) return false;
-  const theirs = [...tokenize(cand.product_name), ...tokenize(cand.brands)];
+  const theirs = tokenize(textParts.join(' '));
   return theirs.some(t => mine.has(t));
 }
 function clearSuggest(it) {
-  delete it.suggestThumb; delete it.suggestReady; delete it.suggestWanted;
-  delete it.suggestNone; delete it.suggestTries; delete it.suggestSource; delete it.suggestUrl;
+  ['suggestThumb','suggestReady','suggestWanted','suggestNone','suggestTries','suggestSource','suggestUrl'].forEach(k => delete it[k]);
 }
-/* client-side clean-up: square crop + auto-levels (no API, always available) */
+/* on-device clean-up of the user's own photo: square crop + auto-levels */
 async function enhancePhoto(blob) {
   if (window.__TEST_THUMB) return { fullBlob: new Blob(['e'], { type: 'image/jpeg' }), thumb: window.__TEST_THUMB };
   const img = await fileToImage(blob);
-  const side = Math.min(img.width, img.height);
-  const S = Math.min(1000, side);
+  const side = Math.min(img.width, img.height), S = Math.min(1100, side);
   const c = document.createElement('canvas'); c.width = S; c.height = S;
   const ctx = c.getContext('2d');
   ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, S, S);
   const d = ctx.getImageData(0, 0, S, S), px = d.data;
   const hist = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
-  for (let i = 0; i < px.length; i += 4) { hist[0][px[i]]++; hist[1][px[i + 1]]++; hist[2][px[i + 2]]++; }
-  const clip = S * S * 0.01, luts = [];
+  for (let i = 0; i < px.length; i += 4) { hist[0][px[i]]++; hist[1][px[i+1]]++; hist[2][px[i+2]]++; }
+  const clip = S * S * 0.008, luts = [];
   for (let ch = 0; ch < 3; ch++) {
     let lo = 0, hi = 255, acc = 0;
     for (let v = 0; v < 256; v++) { acc += hist[ch][v]; if (acc > clip) { lo = v; break; } }
@@ -1067,53 +1087,65 @@ async function enhancePhoto(blob) {
     for (let v = 0; v < 256; v++) lut[v] = Math.max(0, Math.min(255, Math.round((v - lo) * 255 / span)));
     luts.push(lut);
   }
-  for (let i = 0; i < px.length; i += 4) { px[i] = luts[0][px[i]]; px[i + 1] = luts[1][px[i + 1]]; px[i + 2] = luts[2][px[i + 2]]; }
+  for (let i = 0; i < px.length; i += 4) { px[i] = luts[0][px[i]]; px[i+1] = luts[1][px[i+1]]; px[i+2] = luts[2][px[i+2]]; }
   ctx.putImageData(d, 0, 0);
-  const fullBlob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.8));
+  const fullBlob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
   const tc = document.createElement('canvas'); tc.width = 240; tc.height = 240;
   tc.getContext('2d').drawImage(c, 0, 0, 240, 240);
   return { fullBlob, thumb: tc.toDataURL('image/jpeg', 0.6) };
 }
-async function setSuggestion(it, fullBlob, thumb, source, url) {
+/* web image search across sources (all CORS-open + downloadable) */
+async function searchWebImage(it) {
+  // 1) exact product image via barcode
+  if (it.barcode) {
+    const off = await lookupBarcode(it.barcode);
+    if (off && off.image) return { url: off.image, source: 'Open Food Facts (barcode match)' };
+  }
+  const query = [it.brand, it.name].filter(Boolean).join(' ').trim();
+  if (!query) return null;
+  // 2) Open Food Facts name search (full-res), relevance-guarded
+  {
+    const r = await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms=' +
+      encodeURIComponent(query.slice(0, 80)) +
+      '&search_simple=1&action=process&json=1&page_size=10&fields=product_name,brands,image_front_url');
+    if (!r.ok) throw new Error('off ' + r.status);
+    const j = await r.json();
+    const hit = (j.products || []).find(p => p.image_front_url && relevant(it, [p.product_name, p.brands]));
+    if (hit) return { url: bigOFF(hit.image_front_url), source: 'Open Food Facts (search)' };
+  }
+  // 3) Wikimedia Commons image search
+  {
+    const r = await fetch('https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=' +
+      encodeURIComponent(query.slice(0, 80)) +
+      '&gsrnamespace=6&gsrlimit=6&prop=imageinfo&iiprop=url&iiurlwidth=1200&format=json&origin=*');
+    if (!r.ok) throw new Error('wiki ' + r.status);
+    const j = await r.json();
+    const pages = j.query ? Object.values(j.query.pages) : [];
+    const hit = pages.find(p => p.imageinfo && p.imageinfo[0] && relevant(it, [String(p.title || '').replace(/^File:/, '')]));
+    if (hit) return { url: hit.imageinfo[0].thumburl || hit.imageinfo[0].url, source: 'Wikimedia Commons' };
+  }
+  return null;
+}
+async function setSuggestion(it, fullBlob, thumb, source) {
   await dbPutImage(it.id + '-sugg', fullBlob);
   it.suggestThumb = thumb; it.suggestSource = source; it.suggestReady = 1;
-  it.suggestWanted = 0; delete it.suggestTries;
-  if (url) it.suggestUrl = url;
+  it.suggestWanted = 0; it.suggestChecked = Date.now(); delete it.suggestTries; delete it.suggestNone;
   it.updatedAt = Date.now();
   await dbPutItem(clean(it));
+  imgDirty.add(it.id + '-sugg'); await dbSetMeta('imgDirty', [...imgDirty]);
   if (!document.hidden) toast('🖼️ Photo suggestion ready — ' + (it.name || 'item'));
 }
 async function findBetterImage(it) {
-  let cand = null;                                   // {url}
-  let netFailed = false;
-  // 1) exact product by barcode
-  if (it.barcode) {
-    try {
-      const off = await lookupBarcode(it.barcode);
-      if (off && off.image) cand = { url: off.image };
-    } catch (e) { netFailed = true; }
-  }
-  // 2) name search, with relevance guard so we never show a wrong product
-  if (!cand && (it.name || it.brand)) {
-    try {
-      const q = encodeURIComponent([it.brand, it.name].filter(Boolean).join(' ').slice(0, 80));
-      const r = await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + q +
-        '&search_simple=1&action=process&json=1&page_size=10&fields=product_name,brands,image_front_url,image_front_small_url');
-      if (!r.ok) throw new Error('search ' + r.status);
-      const j = await r.json();
-      const hit = (j.products || []).find(p => (p.image_front_url || p.image_front_small_url) && looksRelevant(it, p));
-      if (hit) cand = { url: hit.image_front_url || hit.image_front_small_url };
-    } catch (e) { netFailed = true; }
-  }
-  // 3) online photo found -> download + store
+  let cand = null, netFailed = false;
+  try { cand = await searchWebImage(it); } catch (e) { netFailed = true; }
   if (cand) {
-    const r2 = await fetch(cand.url);            // throws -> retry path
-    if (!r2.ok) throw new Error('image download ' + r2.status);
-    const { fullBlob, thumb } = await compressPhoto(await r2.blob());
-    return setSuggestion(it, fullBlob, thumb, 'Found online (Open Food Facts)', cand.url);
+    const r = await fetch(cand.url);                 // CORS-open sources -> OK; throws -> retry
+    if (!r.ok) throw new Error('download ' + r.status);
+    const { fullBlob, thumb } = await compressPhoto(await r.blob());
+    return setSuggestion(it, fullBlob, thumb, 'Found online — ' + cand.source);
   }
-  if (netFailed) throw new Error('network');       // retry with backoff, do NOT claim "none"
-  // 4) nothing online: offer a cleaned-up version of the user's own photo
+  if (netFailed) throw new Error('network');         // retry, never falsely claim "none"
+  // no web match -> offer a cleaned-up version of the user's own best photo
   const meta = it.imgs || (it.hasImage ? { f: 1 } : {});
   let own = null;
   for (const s of SLOTS) {
@@ -1124,19 +1156,20 @@ async function findBetterImage(it) {
   }
   if (own) {
     const { fullBlob, thumb } = await enhancePhoto(own);
-    return setSuggestion(it, fullBlob, thumb, 'Cleaned up from your photo (no online match)');
+    return setSuggestion(it, fullBlob, thumb, 'Cleaned up from your photo (no web match)');
   }
-  it.suggestWanted = 0; it.suggestNone = 1; it.updatedAt = Date.now();
+  it.suggestWanted = 0; it.suggestNone = 1; it.suggestChecked = Date.now(); it.updatedAt = Date.now();
   await dbPutItem(clean(it));
-  if (!document.hidden) toast('No online photo for this product');
+  if (!document.hidden) toast('No web photo found for this product');
+}
+async function loadSuggBlob(it) {
+  let b = await dbGetImage(it.id + '-sugg').catch(() => null);
+  if (!b && ghConfigured() && navigator.onLine) b = await fetchRemoteImage(it.id, 'sugg').catch(() => null);
+  return b;
 }
 async function acceptSuggestion(it) {
   try {
-    let blob = await dbGetImage(it.id + '-sugg').catch(() => null);
-    if (!blob && it.suggestUrl) {                  // suggestion came from another device
-      const r = await fetch(it.suggestUrl);
-      if (r.ok) blob = (await compressPhoto(await r.blob())).fullBlob;
-    }
+    const blob = await loadSuggBlob(it);
     if (!blob) throw new Error('missing');
     await dbPutImage(it.id + '-f', blob);
     it.imgs = it.imgs || {}; it.imgs.f = 1; it.hasImage = true;
@@ -1144,34 +1177,46 @@ async function acceptSuggestion(it) {
     imgDirty.add(it.id + '-f'); await dbSetMeta('imgDirty', [...imgDirty]);
   } catch (e) { toast('Could not apply that photo — kept yours'); }
   await dbDelImage(it.id + '-sugg').catch(() => {});
-  clearSuggest(it);
-  it.updatedAt = Date.now();
+  clearSuggest(it); it.suggestChecked = Date.now(); it.updatedAt = Date.now();
   await dbPutItem(clean(it));
   renderList(); queueSync();
 }
 async function declineSuggestion(it) {
   await dbDelImage(it.id + '-sugg').catch(() => {});
-  clearSuggest(it);
-  it.updatedAt = Date.now();
+  clearSuggest(it); it.suggestChecked = Date.now(); it.updatedAt = Date.now();
   await dbPutItem(clean(it));
   renderList(); queueSync();
 }
-function openChooser(id) {
+async function bestCurrentBlob(it) {
+  const meta = it.imgs || (it.hasImage ? { f: 1 } : {});
+  for (const s of SLOTS) {
+    if (!meta[s]) continue;
+    let b = await dbGetImage(it.id + '-' + s).catch(() => null);
+    if (!b && s === 'f') b = await dbGetImage(it.id).catch(() => null);
+    if (!b && ghConfigured() && navigator.onLine) b = await fetchRemoteImage(it.id, s).catch(() => null);
+    if (b) return b;
+  }
+  return null;
+}
+function zoomImage(src) {
+  $('#zoomImg').src = src;
+  $('#imgZoom').hidden = false;
+}
+async function openChooser(id) {
   const it = items.find(i => i.id === id);
   if (!it || !it.suggestReady) return;
   chooserId = id;
   $('#chName').textContent = it.name || 'Unnamed item';
-  $('#chImgCur').src = it.thumb || '';
-  $('#chImgNew').src = it.suggestThumb || '';
   $('#chSource').textContent = it.suggestSource || '';
+  $('#chImgCur').src = it.thumb || ''; $('#chImgNew').src = it.suggestThumb || '';
   $('#imgChooser').hidden = false;
   document.body.style.overflow = 'hidden';
+  const cur = await bestCurrentBlob(it);
+  if (cur && chooserId === id) $('#chImgCur').src = URL.createObjectURL(cur);
+  const sug = await loadSuggBlob(it);
+  if (sug && chooserId === id) $('#chImgNew').src = URL.createObjectURL(sug);
 }
-function closeChooser() {
-  $('#imgChooser').hidden = true;
-  chooserId = null;
-  document.body.style.overflow = '';
-}
+function closeChooser() { $('#imgChooser').hidden = true; chooserId = null; document.body.style.overflow = ''; }
 function maybeShowChooser() {
   if (!$('#imgChooser').hidden || !$('#lock').hidden) return;
   const it = live().find(i => i.suggestReady && !chooserSnoozed.has(i.id));
@@ -1589,8 +1634,11 @@ function bindEvents() {
     const it = items.find(i => i.id === chooserId);
     closeChooser();
     if (it) { toast('Updating photo…', 1200); await acceptSuggestion(it); }
-    setTimeout(maybeShowChooser, 400);
+    setTimeout(maybeShowChooser, 500);
   };
+  $('#chImgCur').onclick = e => zoomImage(e.target.src);
+  $('#chImgNew').onclick = e => zoomImage(e.target.src);
+  $('#imgZoom').onclick = () => { $('#imgZoom').hidden = true; $('#zoomImg').src = ''; };
   $('#chKeep').onclick = async () => {
     const it = items.find(i => i.id === chooserId);
     closeChooser();
@@ -1620,7 +1668,7 @@ async function init() {
   maybeShowLock();
   processQueue();
   setTimeout(maybeShowChooser, 1500);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) processQueue(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { processQueue(); setTimeout(maybeShowChooser, 800); } });
   if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => {
     if (e.data && e.data.type === 'process-queue') processQueue();
   });
@@ -1632,7 +1680,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, looksRelevant,
+  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
   state: () => ({ items, settings, filter }),
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
