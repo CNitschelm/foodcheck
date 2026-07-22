@@ -731,9 +731,13 @@ async function openDetail(id) {
   };
   const idBtn = $('#dIdentify');
   if (idBtn) idBtn.onclick = async () => {
+    if (!confirm('Re-identify from this item\'s photos?\n\nClears the current name, brand, barcode and nutrition. Your photos, verdict and notes are kept.')) return;
     idBtn.disabled = true; idBtn.textContent = 'Identifying…';
-    it.pending = 1; it.aiDone = 0; it.offDone = 0;
-    it.nutrition = {}; delete it.nutriSource;
+    ['name','brand','category','quantity','barcode','nutriscore','nova','nutriSource'].forEach(k => delete it[k]);
+    it.nutrition = {}; it.aiDone = 0; it.offDone = 0; it.pending = 1;
+    it.updatedAt = Date.now();
+    await dbPutItem(clean(it));
+    renderList();
     try { await enrichItem(it); } catch (e) {}
     renderList(); queueSync(); openDetail(it.id);
   };
@@ -945,7 +949,7 @@ async function saveForm() {
 
 /* ---------------- AI providers ---------------- */
 const AI_MODEL = 'claude-haiku-4-5-20251001';
-const AI_PROMPT = 'Identify the grocery product in the photo(s) (package front and/or barcode/nutrition label). Step 1: identify the exact product \u2014 brand and product name as printed. Step 2: nutrition values STRICTLY per 100 g (per 100 ml for drinks). Labels often print per serving or per package \u2014 you MUST convert to per 100 g using the printed serving size or net weight (example: values for a 50 g bag \u00d7 2 = per 100 g). Set "nutrition_source":"label" only if values are read directly from, or correctly converted from, a visible label. If no label or no conversion basis is visible, use your knowledge of this exact product for typical per-100 g values and set "nutrition_source":"estimate". Reply with ONLY minified JSON, no markdown: {"name":"","brand":"","category":"","quantity":"","barcode":"","nutrition_source":"label|estimate","nutrition":{"kcal":0,"fat":0,"satfat":0,"carbs":0,"sugars":0,"fiber":0,"protein":0,"salt":0}}. Rules: category = 1-2 words like Snacks, Dairy, Beverages; quantity = net weight/volume if visible; barcode = digits only if clearly readable, else ""; only use null for values you cannot even estimate; never output per-serving or per-package numbers. CAUTION: many labels (especially Thai) state several servings per package \u2014 per-serving values \u00d7 servings-per-pack = whole pack, then \u00f7 net weight \u00d7 100 = per 100 g. Sanity-check your result against typical values (dry snacks/chips \u2248 350-600 kcal per 100 g, drinks usually < 100): if your number looks like half or double the typical value, re-check the serving math.';
+const AI_PROMPT = 'Identify the grocery product in the photo(s) (package front and/or barcode/nutrition label). Step 1: identify the exact product \u2014 brand and full product name as printed, INCLUDING the specific flavour/variant shown on the front (e.g. \'Grilled Corn\', \'Red Bean\'); products in the same range differ only by flavour, so read it carefully from this photo and do not assume. Step 2: nutrition values STRICTLY per 100 g (per 100 ml for drinks). Labels often print per serving or per package \u2014 you MUST convert to per 100 g using the printed serving size or net weight (example: values for a 50 g bag \u00d7 2 = per 100 g). Set "nutrition_source":"label" only if values are read directly from, or correctly converted from, a visible label. If no label or no conversion basis is visible, use your knowledge of this exact product for typical per-100 g values and set "nutrition_source":"estimate". Reply with ONLY minified JSON, no markdown: {"name":"","brand":"","category":"","quantity":"","barcode":"","nutrition_source":"label|estimate","nutrition":{"kcal":0,"fat":0,"satfat":0,"carbs":0,"sugars":0,"fiber":0,"protein":0,"salt":0}}. Rules: category = 1-2 words like Snacks, Dairy, Beverages; quantity = net weight/volume if visible; barcode = digits only if clearly readable, else ""; only use null for values you cannot even estimate; never output per-serving or per-package numbers. CAUTION: many labels (especially Thai) state several servings per package \u2014 per-serving values \u00d7 servings-per-pack = whole pack, then \u00f7 net weight \u00d7 100 = per 100 g. Sanity-check your result against typical values (dry snacks/chips \u2248 350-600 kcal per 100 g, drinks usually < 100): if your number looks like half or double the typical value, re-check the serving math.';
 const GEMINI_MODEL = 'gemini-flash-latest';
 const GEMINI_FALLBACKS = [GEMINI_MODEL, 'gemini-flash-lite-latest', 'gemini-2.0-flash'];
 
@@ -1004,6 +1008,15 @@ async function aiIdentify(imgs) {
 }
 
 /* ---------------- background enrichment queue ---------------- */
+function validGTIN(bc) {
+  const s = String(bc || '').replace(/\D/g, '');
+  if (![8, 12, 13, 14].includes(s.length)) return false;
+  const d = s.split('').map(Number);
+  const chk = d.pop();
+  let sum = 0;
+  d.reverse().forEach((n, i) => { sum += n * (i % 2 === 0 ? 3 : 1); });
+  return (10 - (sum % 10)) % 10 === chk;
+}
 function fillEmpty(it, k, v) {
   if ((it[k] === undefined || it[k] === null || it[k] === '') && v !== undefined && v !== null && v !== '') it[k] = v;
 }
@@ -1025,7 +1038,7 @@ function aiToItem(it, d) {
     if (it.nutrition[k] == null && num(n[k]) !== null) it.nutrition[k] = num(n[k]);
   if (!it.nutriSource) it.nutriSource = d.nutrition_source === 'label' ? 'label' : 'estimate';
   const bc = String(d.barcode || '').replace(/\D/g, '');
-  if (!it.barcode && bc.length >= 8) it.barcode = bc;
+  if (!it.barcode && validGTIN(bc)) it.barcode = bc;   // reject AI-misread codes
 }
 async function getItemPhotos(it) {
   const out = [];
@@ -1709,7 +1722,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
+  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
   state: () => ({ items, filter }),
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
