@@ -123,6 +123,7 @@ section[hidden]{display:none}
 .rvimg{width:31%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;border:1px solid var(--line);box-shadow:var(--shadow)}
 .rvname{font-size:21px;font-weight:750;letter-spacing:-.02em;margin-top:4px}
 
+.pendchip.dup{background:rgba(217,119,6,.9)}
 .pendchip{position:absolute;bottom:8px;left:8px;background:rgba(15,23,42,.72);color:#fff;
   font-size:10.5px;padding:4px 9px;border-radius:999px;font-weight:600;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 
@@ -187,6 +188,8 @@ section[hidden]{display:none}
 .nutritable td{padding:8px 10px;border-bottom:1px solid var(--line)}
 .nutritable tbody tr:nth-child(odd){background:color-mix(in srgb, var(--bg) 60%, transparent)}
 .nutritable td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.dupwarn{background:var(--bad-bg);border:1px solid var(--bad);border-radius:12px;padding:11px 13px;
+  font-size:13px;margin-top:12px;line-height:1.5}
 .dnotes{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px 13px;
   font-size:14px;white-space:pre-wrap;margin-top:8px;line-height:1.5}
 .dmeta{font-size:12px;color:var(--muted);margin-top:12px}
@@ -547,6 +550,11 @@ let draft = null;
 let syncing = false;
 
 const live = () => items.filter(i => !i.deletedAt);
+function dupPartner(it) {
+  const bc = String(it.barcode || '').trim();
+  if (!bc) return null;
+  return live().find(o => o.id !== it.id && String(o.barcode || '').trim() === bc) || null;
+}
 
 /* ---------------- merge (sync core) ---------------- */
 function mergeItems(local, remote) {
@@ -606,7 +614,8 @@ function renderList() {
       ${it.thumb ? `<img class="ph" src="${esc(it.thumb)}" alt="" loading="lazy">`
                  : `<div class="noph">${it.status === 'bad' ? '✕' : '🛒'}</div>`}
       <span class="badge ${it.status}">${it.status === 'good' ? '✓ GOOD' : '✕ BAD'}</span>
-      ${it.pending ? '<span class="pendchip">🤖 identifying…</span>' : ''}
+      ${it.pending ? '<span class="pendchip">🤖 identifying…</span>'
+        : dupPartner(it) ? '<span class="pendchip dup">⚠️ duplicate</span>' : ''}
       ${it.nutriscore && NS_COLORS[it.nutriscore] ?
         `<span class="nscore" style="background:${NS_COLORS[it.nutriscore]}">${esc(it.nutriscore)}</span>` : ''}
       <div class="info">
@@ -654,6 +663,7 @@ async function openDetail(id) {
     ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
     <div class="dmeta">${it.barcode ? 'Barcode ' + esc(it.barcode) + ' · ' : ''}Added ${new Date(it.createdAt).toLocaleDateString()}</div>
     ${it.pending ? '<div class="hint">🤖 Identifying in the background — details fill in automatically.</div>' : ''}
+    ${(() => { const d = dupPartner(it); return d ? `<div class="dupwarn">⚠️ Same barcode as <b>${esc(d.name || 'another item')}</b> — likely the same product saved twice.<button class="btn sm danger" id="dDelDup" style="margin-top:8px;width:100%">Delete this duplicate</button></div>` : ''; })()}
     ${it.suggestWanted ? '<div class="hint">🔎 Searching the web for a better photo…</div>' : ''}
     <button class="btn ghost" id="dImgSuggest" style="width:100%;margin-top:12px"${it.suggestWanted ? ' disabled' : ''}>${
       it.suggestWanted ? '🔎 Searching…'
@@ -700,6 +710,14 @@ async function openDetail(id) {
     wrap.insertBefore(img, thumbsRow);
   }
 
+  const dupBtn = $('#dDelDup');
+  if (dupBtn) dupBtn.onclick = async () => {
+    if (!confirm('Delete this duplicate entry? The other copy stays.')) return;
+    it.deletedAt = Date.now(); it.updatedAt = Date.now();
+    await dbPutItem(clean(it));
+    for (const s of SLOTS) await dbDelImage(it.id + '-' + s).catch(() => {});
+    closeSheet(); renderList(); toast('Duplicate deleted'); queueSync();
+  };
   const sgBtn = $('#dImgSuggest');
   if (sgBtn) sgBtn.onclick = async () => {
     if (it.suggestReady) { closeSheet(); openChooser(it.id); return; }
@@ -881,11 +899,16 @@ function startEdit(id) {
   $('#saveBtn').textContent = 'Save changes';
   showView('add');
 }
+let savingNow = false;
 async function saveForm() {
+  if (savingNow) return;
   const anyPhoto = SLOTS.some(s => draft.photos[s]);
   const wasEditing = !!editingId;
   if (!draft.status) { toast('Pick Good or Bad'); return; }
   if (!anyPhoto && !wasEditing) { toast('Add at least one photo'); return; }
+  savingNow = true;
+  const btn = $('#saveBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
   const now = Date.now();
   let it = wasEditing ? items.find(i => i.id === editingId) : null;
   if (!it) { it = { id: uid(), createdAt: now, imgs: {}, nutrition: {} }; items.push(it); }
@@ -914,6 +937,10 @@ async function saveForm() {
   resetForm(); showView('list');
   queueSync(); processQueue();
   try { const reg = await navigator.serviceWorker.ready; if ('sync' in reg) await reg.sync.register('fc-enrich'); } catch (e) {}
+  } finally {
+    savingNow = false;
+    const b2 = $('#saveBtn'); if (b2) { b2.disabled = false; b2.textContent = editingId ? 'Save changes' : 'Save item'; }
+  }
 }
 
 /* ---------------- AI providers ---------------- */
@@ -1682,7 +1709,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
+  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
   state: () => ({ items, filter }),
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
