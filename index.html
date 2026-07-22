@@ -603,7 +603,7 @@ function renderList() {
   }
   wrap.innerHTML = list.map(it => `
     <div class="card" data-id="${esc(it.id)}">
-      ${it.thumb ? `<img class="ph" src="${it.thumb}" alt="" loading="lazy">`
+      ${it.thumb ? `<img class="ph" src="${esc(it.thumb)}" alt="" loading="lazy">`
                  : `<div class="noph">${it.status === 'bad' ? '✕' : '🛒'}</div>`}
       <span class="badge ${it.status}">${it.status === 'good' ? '✓ GOOD' : '✕ BAD'}</span>
       ${it.pending ? '<span class="pendchip">🤖 identifying…</span>' : ''}
@@ -751,6 +751,8 @@ function loadZXing() {
     const s = document.createElement('script');
     const to = setTimeout(() => { zxingP = null; rej(new Error('ZXing load timeout')); }, 8000);
     s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+    s.integrity = 'sha384-BzBxP10ZE72aitqj5UMmUsbKFliP/DZqA8Wq+BNNhlIJDGoEd1tpkMYXOg9+n6sB';
+    s.crossOrigin = 'anonymous';
     s.onload = () => { clearTimeout(to); res(); };
     s.onerror = () => { clearTimeout(to); zxingP = null; rej(new Error('ZXing failed to load')); };
     document.head.appendChild(s);
@@ -875,7 +877,7 @@ function startEdit(id) {
   $('#vBad').classList.toggle('on', it.status === 'bad');
   $('#photosCard').hidden = true;
   $('#detailsCard').hidden = false;
-  $('#rvImgRow').innerHTML = it.thumb ? `<img class="rvimg" src="${it.thumb}" alt="">` : '';
+  $('#rvImgRow').innerHTML = it.thumb ? `<img class="rvimg" src="${esc(it.thumb)}" alt="">` : '';
   $('#saveBtn').textContent = 'Save changes';
   showView('add');
 }
@@ -1277,10 +1279,10 @@ async function deriveBundleKey(pw, salt, iters) {
 async function encryptBundle(pw, obj) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveBundleKey(pw, salt, 310000);
+  const key = await deriveBundleKey(pw, salt, 600000);
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key,
     new TextEncoder().encode(JSON.stringify(obj))));
-  return JSON.stringify({ v: 1, kdf: 'PBKDF2-SHA256', iters: 310000,
+  return JSON.stringify({ v: 1, kdf: 'PBKDF2-SHA256', iters: 600000,
     salt: b64FromBytes(salt), iv: b64FromBytes(iv), data: b64FromBytes(ct) });
 }
 async function decryptBundle(pw, text) {
@@ -1681,7 +1683,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
   mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
-  state: () => ({ items, settings, filter }),
+  state: () => ({ items, filter }),
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
   renderList
