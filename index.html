@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#16a34a">
 <title>FoodCheck</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -25,7 +25,8 @@
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
   font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;
-  -webkit-font-smoothing:antialiased}
+  -webkit-font-smoothing:antialiased;touch-action:pan-x pan-y;-webkit-text-size-adjust:100%}
+img{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 button,input,select,textarea{font:inherit;color:inherit}
 img{display:block}
 button{cursor:pointer}
@@ -1709,7 +1710,24 @@ function bindEvents() {
 }
 
 /* ---------------- init ---------------- */
+function blockPinchZoom() {
+  // Safari (iOS/macOS) pinch gestures
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev =>
+    document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+  // any two-finger zoom (covers browsers that honour touch events)
+  document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+  // ctrl+wheel / trackpad pinch on desktop
+  document.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+  // stray double-tap zoom safety net
+  let lastTouch = 0;
+  document.addEventListener('touchend', e => {
+    const now = Date.now();
+    if (now - lastTouch < 320) e.preventDefault();
+    lastTouch = now;
+  }, { passive: false });
+}
 async function init() {
+  blockPinchZoom();
   await openDB();
   items = (await dbAllItems()) || [];
   const st = await dbGetMeta('settings'); if (st) settings = Object.assign(settings, st);
