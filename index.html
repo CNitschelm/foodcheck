@@ -77,10 +77,12 @@ section[hidden]{display:none}
 .card .ph{width:100%;aspect-ratio:1/1;object-fit:cover;background:var(--line)}
 .card .noph{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;
   font-size:42px;background:linear-gradient(160deg,var(--line),transparent);color:var(--muted)}
-.card .info{padding:10px 12px 12px}
+.card .info{padding:10px 12px 11px;display:flex;flex-direction:column;flex:1;gap:2px}
 .card .nm{font-size:14px;font-weight:650;line-height:1.3;letter-spacing:-.01em;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.card .br{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  min-height:2.6em}
+.card .br{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;min-height:1.15em}
 .badge{position:absolute;top:9px;left:9px;border-radius:999px;padding:5px 11px;
   font-size:11.5px;font-weight:800;letter-spacing:.02em;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 .badge.good{background:linear-gradient(135deg,var(--good),var(--good-2))}
@@ -128,12 +130,14 @@ section[hidden]{display:none}
 .pendchip{position:absolute;bottom:8px;left:8px;background:rgba(15,23,42,.72);color:#fff;
   font-size:10.5px;padding:4px 9px;border-radius:999px;font-weight:600;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 
-.stars{font-size:12px;letter-spacing:1px;margin-top:3px;color:var(--muted);display:flex;
-  align-items:center;gap:5px;line-height:1}
+.stars{font-size:12px;color:var(--muted);display:flex;align-items:center;
+  justify-content:space-between;gap:6px;line-height:1;margin-top:auto;padding-top:6px}
+.stars .sglyph{letter-spacing:1px;flex:none}
 .stars.s5,.stars.s4{color:#16a34a}
 .stars.s3{color:#ca8a04}
 .stars.s2,.stars.s1{color:#dc2626}
-.stars .ppc{font-size:9.5px;letter-spacing:0;color:var(--muted);font-weight:600}
+.stars .ppc{font-size:9.5px;letter-spacing:0;color:var(--muted);font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
 .chip.nut{font-size:13px;padding:7px 14px}
 .chip.nut.on{background:var(--text);color:var(--bg);border-color:var(--text)}
 .ratebox{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:14px;background:var(--bg)}
@@ -715,10 +719,10 @@ function renderList() {
         `<span class="nscore" style="background:${NS_COLORS[it.nutriscore]}">${esc(it.nutriscore)}</span>` : ''}
       <div class="info">
         <div class="nm">${esc(it.name) || '(no name)'}</div>
-        ${it.brand ? `<div class="br">${esc(it.brand)}</div>` : ''}
+        <div class="br">${esc(it.brand || '')}</div>
         ${(() => { const r = nutriRate(it); return r
-          ? `<div class="stars s${r.stars}">${starStr(r.stars)}<span class="ppc">${[r.ppc != null ? r.ppc + "p" : null, r.fpc != null ? r.fpc + "f" : null].filter(Boolean).join(" + ")} /100kcal</span></div>`
-          : '<div class="stars none">☆☆☆☆☆<span class="ppc">no data</span></div>'; })()}
+          ? `<div class="stars s${r.stars}"><span class="sglyph">${starStr(r.stars)}</span><span class="ppc">${r.ppc != null ? r.ppc + ' P' : ''}${r.ppc != null && r.fpc ? ' · ' : ''}${r.fpc ? r.fpc + ' F' : ''}</span></div>`
+          : '<div class="stars none"><span class="sglyph">☆☆☆☆☆</span><span class="ppc">no data</span></div>'; })()}
       </div>
     </div>`).join('');
   wrap.querySelectorAll('.card').forEach(c =>
@@ -735,6 +739,7 @@ async function openDetail(id) {
   const it = items.find(i => i.id === id);
   if (!it) return;
   openDetailId = id;
+  const myToken = ++detailToken;   // abandon image work from a previous open
   const n = it.nutrition || {};
   let nutRows = NUT_ROWS.filter(([k]) => n[k] !== null && n[k] !== undefined)
     .map(([k, lb, u]) => `<tr><td>${lb}</td><td>${n[k]} ${u}</td></tr>`).join('');
@@ -803,14 +808,17 @@ async function openDetail(id) {
   for (const s of SLOTS) {
     if (!imgsMeta[s]) continue;
     let blob = await dbGetImage(it.id + '-' + s).catch(() => null);
+    if (myToken !== detailToken) return;                       // a newer open() took over
     if (!blob && s === 'f') blob = await dbGetImage(it.id).catch(() => null); // legacy key
+    if (myToken !== detailToken) return;
     if (blob) addImg(blob);
     else if (settings.token && navigator.onLine) {
       fetchRemoteImage(it.id, s).then(b2 => {
-        if (b2 && $('#sheet').classList.contains('open')) addImg(b2);
+        if (b2 && myToken === detailToken && $('#sheet').classList.contains('open')) addImg(b2);
       }).catch(() => {});
     }
   }
+  if (myToken !== detailToken) return;
   if (!wrap.querySelector('.dimg') && it.thumb) {
     const img = document.createElement('img'); img.className = 'dimg'; img.src = it.thumb;
     wrap.insertBefore(img, thumbsRow);
@@ -1205,6 +1213,7 @@ async function enrichItem(it) {
 /* ---------------- better-photo suggestions ---------------- */
 let chooserId = null;
 let openDetailId = null;
+let detailToken = 0;
 const chooserSnoozed = new Set();
 const STOPWORDS = ['the','and','with','for','original','flavor','flavour','flavored','snack','snacks','pack','size','new','file','jpg','jpeg','png'];
 function tokenize(s) {
