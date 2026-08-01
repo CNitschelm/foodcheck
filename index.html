@@ -587,46 +587,36 @@ let syncing = false;
 const live = () => items.filter(i => !i.deletedAt);
 
 /* Nutrition rating 1-5, tuned for fat-loss + muscle.
-   Two routes to a good score, whichever suits the food:
-     A) protein efficiency  - g protein per 100 kcal   (muscle)
-     B) fibre + volume      - g fibre per 100 kcal      (satiety, gut, micronutrients)
-   Then sugar / saturated fat / salt / calorie-density adjust it.
-   Computed live, so every existing item is rated automatically. */
+   Core metric: quality density = (protein + 0.75 x fibre) per 100 kcal.
+   Protein is weighted higher (muscle), fibre still counts properly (satiety, gut),
+   and a food with BOTH is rewarded for both. Sugar / saturated fat / salt /
+   calorie density then adjust it. Computed live -> existing items rate automatically. */
+const FIBRE_WEIGHT = 0.75;
 function nutriRate(it) {
   const n = (it && it.nutrition) || {};
-  const kcal = num(n.kcal), protein = num(n.protein);
+  const kcal = num(n.kcal);
   if (kcal == null || kcal <= 0) return null;
-  const fib = num(n.fiber), sug = num(n.sugars), sat = num(n.satfat), salt = num(n.salt);
+  const protein = num(n.protein), fib = num(n.fiber);
   if (protein == null && fib == null) return null;      // not enough to judge
+  const sug = num(n.sugars), sat = num(n.satfat), salt = num(n.salt);
   const plus = [], minus = [];
 
-  // route A - protein efficiency
-  const ppc = protein == null ? null : protein / kcal * 100;
-  let pScore = 0;
-  if (ppc != null) {
-    pScore = ppc >= 15 ? 95 : ppc >= 10 ? 80 : ppc >= 7 ? 67 : ppc >= 5 ? 54
-           : ppc >= 3 ? 41 : ppc >= 1.5 ? 27 : 14;
-  }
-  // route B - fibre per calorie
-  const fpc = fib == null ? null : fib / kcal * 100;
-  let fScore = 0;
-  if (fpc != null) {
-    fScore = fpc >= 8 ? 85 : fpc >= 5 ? 72 : fpc >= 3 ? 58 : fpc >= 2 ? 45
-           : fpc >= 1 ? 32 : 15;
-  }
-  const proteinWins = pScore >= fScore;
-  let score = Math.max(pScore, fScore);
-  if (proteinWins && ppc != null) {
-    plus.push(ppc >= 10 ? `Excellent protein per calorie (${Math.round(ppc * 10) / 10} g/100 kcal)`
-      : ppc >= 5 ? `Good protein per calorie (${Math.round(ppc * 10) / 10} g/100 kcal)`
-      : `Low protein per calorie (${Math.round(ppc * 10) / 10} g/100 kcal)`);
-    if (ppc < 5) { minus.push('Not a strong protein source'); plus.pop(); }
-  } else if (fpc != null) {
-    plus.push(`Fibre-rich for its calories (${Math.round(fpc * 10) / 10} g/100 kcal)`);
-    if (ppc != null && ppc < 3) minus.push('Very little protein');
-  }
+  const ppc = protein == null ? null : protein / kcal * 100;   // g protein / 100 kcal
+  const fpc = fib == null ? null : fib / kcal * 100;           // g fibre   / 100 kcal
+  const idx = (ppc || 0) + FIBRE_WEIGHT * (fpc || 0);          // weighted quality density
 
-  // whole-food sugar (comes with fibre) is penalised less than added sugar
+  let score = idx >= 15 ? 95 : idx >= 11 ? 85 : idx >= 8 ? 72 : idx >= 6 ? 60
+            : idx >= 4 ? 48 : idx >= 2.5 ? 35 : idx >= 1.5 ? 25 : 14;
+
+  const r1 = v => Math.round(v * 10) / 10;
+  if (ppc != null && ppc >= 7) plus.push(`Strong protein per calorie (${r1(ppc)} g/100 kcal)`);
+  else if (ppc != null && ppc >= 4) plus.push(`Reasonable protein (${r1(ppc)} g/100 kcal)`);
+  else if (ppc != null) minus.push(`Little protein (${r1(ppc)} g/100 kcal)`);
+  if (fpc != null && fpc >= 5) plus.push(`Fibre-rich for its calories (${r1(fpc)} g/100 kcal)`);
+  else if (fpc != null && fpc >= 2.5) plus.push(`Useful fibre (${r1(fpc)} g/100 kcal)`);
+  if (ppc != null && fpc != null && ppc >= 4 && fpc >= 2.5) plus.push('Protein and fibre together');
+
+  // whole-food sugar (arriving with fibre) is penalised less than added sugar
   if (sug != null) {
     const soften = fib == null ? 1 : fib >= 6 ? 0.35 : fib >= 3 ? 0.6 : 1;
     if (sug >= 22) { score -= 15 * soften; minus.push('Very high sugar'); }
@@ -638,10 +628,6 @@ function nutriRate(it) {
     else if (sat >= 3) { score -= 4; minus.push('Some saturated fat'); }
     else if (sat <= 1.5) { score += 3; plus.push('Low saturated fat'); }
   }
-  if (proteinWins && fib != null) {                    // avoid double-counting fibre
-    if (fib >= 6) { score += 8; plus.push('High fibre'); }
-    else if (fib >= 3) { score += 4; plus.push('Good fibre'); }
-  }
   if (salt != null) {
     if (salt >= 1.5) { score -= 6; minus.push('High salt'); }
     else if (salt >= 1.0) { score -= 3; minus.push('Fairly salty'); }
@@ -652,8 +638,8 @@ function nutriRate(it) {
 
   score = Math.max(0, Math.min(100, score));
   const stars = score >= 80 ? 5 : score >= 62 ? 4 : score >= 45 ? 3 : score >= 28 ? 2 : 1;
-  return { stars, score: Math.round(score), ppc: ppc == null ? null : Math.round(ppc * 10) / 10,
-           fpc: fpc == null ? null : Math.round(fpc * 10) / 10, proteinWins, plus, minus };
+  return { stars, score: Math.round(score), idx: r1(idx),
+           ppc: ppc == null ? null : r1(ppc), fpc: fpc == null ? null : r1(fpc), plus, minus };
 }
 const starStr = s => '★'.repeat(s) + '☆'.repeat(5 - s);
 function dupPartner(it) {
@@ -731,7 +717,7 @@ function renderList() {
         <div class="nm">${esc(it.name) || '(no name)'}</div>
         ${it.brand ? `<div class="br">${esc(it.brand)}</div>` : ''}
         ${(() => { const r = nutriRate(it); return r
-          ? `<div class="stars s${r.stars}">${starStr(r.stars)}<span class="ppc">${r.proteinWins && r.ppc != null ? r.ppc + "g protein/100kcal" : r.fpc + "g fibre/100kcal"}</span></div>`
+          ? `<div class="stars s${r.stars}">${starStr(r.stars)}<span class="ppc">${[r.ppc != null ? r.ppc + "p" : null, r.fpc != null ? r.fpc + "f" : null].filter(Boolean).join(" + ")} /100kcal</span></div>`
           : '<div class="stars none">☆☆☆☆☆<span class="ppc">no data</span></div>'; })()}
       </div>
     </div>`).join('');
@@ -777,7 +763,7 @@ async function openDetail(id) {
       const li = a => a.map(x => `<li>${esc(x)}</li>`).join('');
       return `<div class="ratebox s${r.stars}">
         <div class="rtop"><span class="rstars">${starStr(r.stars)}</span><span class="rscore">${r.stars}/5 for your goals</span></div>
-        <div class="rppc"><b>${r.ppc != null ? r.ppc + " g protein" : "—"} / ${r.fpc != null ? r.fpc + " g fibre" : "—"} per 100 kcal</b></div>
+        <div class="rppc"><b>${r.ppc != null ? r.ppc : "—"} g protein + ${r.fpc != null ? r.fpc : "—"} g fibre per 100 kcal</b><br><span style="font-size:12px;color:var(--muted)">quality index ${r.idx} (protein counts full, fibre 0.75\u00d7)</span></div>
         <ul class="rlist">${li(r.plus)}${li(r.minus)}</ul>
       </div>`; })()}
     ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
