@@ -128,6 +128,27 @@ section[hidden]{display:none}
 .pendchip{position:absolute;bottom:8px;left:8px;background:rgba(15,23,42,.72);color:#fff;
   font-size:10.5px;padding:4px 9px;border-radius:999px;font-weight:600;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 
+.stars{font-size:12px;letter-spacing:1px;margin-top:3px;color:var(--muted);display:flex;
+  align-items:center;gap:5px;line-height:1}
+.stars.s5,.stars.s4{color:#16a34a}
+.stars.s3{color:#ca8a04}
+.stars.s2,.stars.s1{color:#dc2626}
+.stars .ppc{font-size:9.5px;letter-spacing:0;color:var(--muted);font-weight:600}
+.chip.nut{font-size:13px;padding:7px 14px}
+.chip.nut.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.ratebox{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:14px;background:var(--bg)}
+.ratebox.s5,.ratebox.s4{border-color:var(--good);background:var(--good-bg)}
+.ratebox.s2,.ratebox.s1{border-color:var(--bad);background:var(--bad-bg)}
+.ratebox.none{color:var(--muted);font-size:13px}
+.rtop{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.rstars{font-size:19px;letter-spacing:2px}
+.ratebox.s5 .rstars,.ratebox.s4 .rstars{color:#16a34a}
+.ratebox.s3 .rstars{color:#ca8a04}
+.ratebox.s2 .rstars,.ratebox.s1 .rstars{color:#dc2626}
+.rscore{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.rppc{font-size:14px;margin-top:6px}
+.rlist{margin:8px 0 0;padding-left:18px;font-size:12.5px;color:var(--muted);line-height:1.6}
+
 /* ---- buttons ---- */
 .btn{border:none;border-radius:13px;padding:11px 17px;font-weight:650;
   background:var(--text);color:var(--bg);font-size:15px;transition:opacity .15s}
@@ -277,12 +298,19 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
       <select id="sortSel">
         <option value="new">Newest</option>
         <option value="az">A–Z</option>
+        <option value="nut">Nutrition</option>
       </select>
     </div>
     <div class="chips" id="statusChips">
       <button class="chip on" data-f="all">All</button>
       <button class="chip good" data-f="good">✓ Good</button>
       <button class="chip bad" data-f="bad">✕ Bad</button>
+    </div>
+    <div class="chips" id="nutChips">
+      <button class="chip nut on" data-n="0">Any nutrition</button>
+      <button class="chip nut" data-n="3">★★★+</button>
+      <button class="chip nut" data-n="4">★★★★+</button>
+      <button class="chip nut" data-n="5">★★★★★</button>
     </div>
     <div id="countLine"></div>
     <div id="cards"></div>
@@ -551,12 +579,59 @@ const dbSetMeta   = (k, v) => idb('meta', 'readwrite', s => s.put(v, k));
 let items = [];
 let settings = { repo: '', token: '', branch: 'main', aiKey: '' };
 let imgDirty = new Set();
-let filter = 'all', sortMode = 'new', searchQ = '';
+let filter = 'all', sortMode = 'new', searchQ = '', nutMin = 0;
 let editingId = null;
 let draft = null;
 let syncing = false;
 
 const live = () => items.filter(i => !i.deletedAt);
+
+/* Nutrition rating 1-5, tuned for fat-loss + muscle: protein per calorie dominates,
+   then sugar / saturated fat / fibre / salt / calorie density adjust it.
+   Computed on the fly so existing items are rated automatically. */
+function nutriRate(it) {
+  const n = (it && it.nutrition) || {};
+  const kcal = num(n.kcal), protein = num(n.protein);
+  if (kcal == null || protein == null || kcal <= 0) return null;
+  const ppc = protein / kcal * 100;                    // g protein per 100 kcal
+  const plus = [], minus = [];
+  let score;
+  if (ppc >= 15) { score = 95; plus.push('Outstanding protein per calorie'); }
+  else if (ppc >= 10) { score = 80; plus.push('Excellent protein per calorie'); }
+  else if (ppc >= 7) { score = 67; plus.push('Good protein per calorie'); }
+  else if (ppc >= 5) { score = 54; plus.push('Decent protein per calorie'); }
+  else if (ppc >= 3) { score = 41; minus.push('Modest protein per calorie'); }
+  else if (ppc >= 1.5) { score = 27; minus.push('Low protein per calorie'); }
+  else { score = 14; minus.push('Very little protein per calorie'); }
+
+  const sug = num(n.sugars), sat = num(n.satfat), fib = num(n.fiber), salt = num(n.salt);
+  if (sug != null) {
+    if (sug >= 22) { score -= 15; minus.push('Very high sugar'); }
+    else if (sug >= 10) { score -= 8; minus.push('High sugar'); }
+    else if (sug <= 5) { score += 4; plus.push('Low sugar'); }
+  }
+  if (sat != null) {
+    if (sat >= 6) { score -= 10; minus.push('High saturated fat'); }
+    else if (sat >= 3) { score -= 4; minus.push('Some saturated fat'); }
+    else if (sat <= 1.5) { score += 3; plus.push('Low saturated fat'); }
+  }
+  if (fib != null) {
+    if (fib >= 6) { score += 8; plus.push('High fibre'); }
+    else if (fib >= 3) { score += 4; plus.push('Good fibre'); }
+  }
+  if (salt != null) {
+    if (salt >= 1.5) { score -= 6; minus.push('High salt'); }
+    else if (salt >= 1.0) { score -= 3; minus.push('Fairly salty'); }
+  }
+  if (kcal >= 450) { score -= 6; minus.push('Calorie-dense'); }
+  else if (kcal >= 350) { score -= 3; minus.push('Fairly calorie-dense'); }
+  else if (kcal <= 120) { score += 5; plus.push('Low calorie density — filling'); }
+
+  score = Math.max(0, Math.min(100, score));
+  const stars = score >= 80 ? 5 : score >= 62 ? 4 : score >= 45 ? 3 : score >= 28 ? 2 : 1;
+  return { stars, score: Math.round(score), ppc: Math.round(ppc * 10) / 10, plus, minus };
+}
+const starStr = s => '★'.repeat(s) + '☆'.repeat(5 - s);
 function dupPartner(it) {
   const bc = String(it.barcode || '').trim();
   if (!bc) return null;
@@ -601,13 +676,16 @@ function matches(it, q) {
 }
 function renderList() {
   let list = live().filter(i => (filter === 'all' || i.status === filter) && matches(i, searchQ));
+  if (nutMin) list = list.filter(i => { const r = nutriRate(i); return r && r.stars >= nutMin; });
   list.sort(sortMode === 'az'
     ? (a, b) => (a.name || '').localeCompare(b.name || '')
+    : sortMode === 'nut'
+    ? (a, b) => ((nutriRate(b) || {}).score || -1) - ((nutriRate(a) || {}).score || -1)
     : (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
   const g = live().filter(i => i.status === 'good').length;
   const b = live().filter(i => i.status === 'bad').length;
-  $('#countLine').textContent = `${list.length} shown · ${g} good · ${b} bad`;
+  $('#countLine').textContent = `${list.length} shown · ${g} good · ${b} bad${nutMin ? ' · ★' + nutMin + '+ only' : ''}`;
 
   const wrap = $('#cards');
   if (!list.length) {
@@ -628,6 +706,9 @@ function renderList() {
       <div class="info">
         <div class="nm">${esc(it.name) || '(no name)'}</div>
         ${it.brand ? `<div class="br">${esc(it.brand)}</div>` : ''}
+        ${(() => { const r = nutriRate(it); return r
+          ? `<div class="stars s${r.stars}">${starStr(r.stars)}<span class="ppc">${r.ppc}g/100kcal</span></div>`
+          : '<div class="stars none">☆☆☆☆☆<span class="ppc">no data</span></div>'; })()}
       </div>
     </div>`).join('');
   wrap.querySelectorAll('.card').forEach(c =>
@@ -668,6 +749,13 @@ async function openDetail(id) {
       <button class="vbtn bad ${it.status === 'bad' ? 'on' : ''}" id="dBad">✕ Bad</button>
     </div>
     ${it.notes ? `<div class="dnotes">${esc(it.notes)}</div>` : ''}
+    ${(() => { const r = nutriRate(it); if (!r) return '<div class="ratebox none">☆☆☆☆☆ <span>Nutrition rating needs calories + protein</span></div>';
+      const li = a => a.map(x => `<li>${esc(x)}</li>`).join('');
+      return `<div class="ratebox s${r.stars}">
+        <div class="rtop"><span class="rstars">${starStr(r.stars)}</span><span class="rscore">${r.stars}/5 for your goals</span></div>
+        <div class="rppc"><b>${r.ppc} g protein per 100 kcal</b></div>
+        <ul class="rlist">${li(r.plus)}${li(r.minus)}</ul>
+      </div>`; })()}
     ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
     <div class="dmeta">${it.barcode ? 'Barcode ' + esc(it.barcode) + ' · ' : ''}Added ${new Date(it.createdAt).toLocaleDateString()}</div>
     ${it.pending ? '<div class="hint">🤖 Identifying in the background — details fill in automatically.</div>' : ''}
@@ -1646,6 +1734,11 @@ function bindEvents() {
     document.querySelectorAll('#statusChips .chip').forEach(c => c.classList.toggle('on', c === ch));
     renderList();
   });
+  document.querySelectorAll('#nutChips .chip').forEach(ch => ch.onclick = () => {
+    nutMin = +ch.dataset.n;
+    document.querySelectorAll('#nutChips .chip').forEach(c => c.classList.toggle('on', c === ch));
+    renderList();
+  });
 
   for (const s of SLOTS) {
     $(SLOT_BTN[s]).addEventListener('click', () => $(SLOT_INPUT[s]).click());
@@ -1754,7 +1847,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
+  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, nutriRate, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
   state: () => ({ items, filter }),
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
