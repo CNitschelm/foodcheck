@@ -9,6 +9,17 @@ Personal grocery good/bad database. Snap a photo, mark **Good** (whitelist) or *
 - **Chips** — filter All / ✓ Good / ✕ Bad
 - Tap a card for photo, notes, and nutrition
 
+## Quick check (nothing saved) 🔍
+For something you haven't bought — "is this actually healthy?" in the aisle.
+
+1. Tap **🔍 Check** in the bottom bar
+2. Snap the **front** and/or the **barcode / label** — or just type the barcode number
+3. Tap **Check it**
+
+You get a verdict banner (Great choice → Avoid), the 1–5 star rating, why it scored that way, and the full nutrition table. **Nothing is written to your database** — no item, no photo, no sync. If it turns out to be a keeper, tap **Save as Good / Save as Bad** on the result and it drops into the normal add form already filled in.
+
+If it can't identify the product (no barcode match, no AI key), you can type the numbers off the label yourself and it rates them on the spot — still without saving.
+
 ## Add an item
 1. Tap **＋ Add**
 2. **Package photo** — front of the product (becomes the card image)

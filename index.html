@@ -153,6 +153,27 @@ section[hidden]{display:none}
 .rppc{font-size:14px;margin-top:6px}
 .rlist{margin:8px 0 0;padding-left:18px;font-size:12.5px;color:var(--muted);line-height:1.6}
 
+/* ---- quick check ---- */
+.qbanner{border-radius:16px;padding:16px 16px 14px;text-align:center;color:#fff;
+  box-shadow:var(--shadow);margin-bottom:2px}
+.qbanner.good{background:linear-gradient(135deg,var(--good),var(--good-2))}
+.qbanner.mid{background:linear-gradient(135deg,#ca8a04,#d97706)}
+.qbanner.bad{background:linear-gradient(135deg,var(--bad),var(--bad-2))}
+.qbanner.none{background:linear-gradient(135deg,#64748b,#475569)}
+.qbanner .qstars{font-size:27px;letter-spacing:3px;line-height:1.1}
+.qbanner .qword{font-size:23px;font-weight:800;letter-spacing:-.02em;margin-top:5px}
+.qbanner .qsub{font-size:13px;opacity:.92;margin-top:3px}
+.qname{font-size:19px;font-weight:750;letter-spacing:-.02em;margin:14px 0 2px}
+.qbrand{color:var(--muted);font-size:13.5px}
+.qsrc{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.6}
+.qactions{display:flex;gap:10px;margin-top:14px}
+.qactions .btn{flex:1}
+.qsavewrap{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.qspin{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.35);
+  border-top-color:#fff;border-radius:50%;animation:qspin .7s linear infinite;vertical-align:-2px;margin-right:7px}
+@keyframes qspin{to{transform:rotate(360deg)}}
+.qsteps{font-size:12.5px;color:var(--muted);line-height:1.9;margin-top:10px}
+
 /* ---- buttons ---- */
 .btn{border:none;border-radius:13px;padding:11px 17px;font-weight:650;
   background:var(--text);color:var(--bg);font-size:15px;transition:opacity .15s}
@@ -369,6 +390,24 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
     </div>
   </section>
 
+  <!-- ============ QUICK CHECK (nothing saved) ============ -->
+  <section id="view-check" hidden>
+    <div class="formcard" id="qInputCard">
+      <h3>Quick check — nothing gets saved</h3>
+      <div class="photobtns">
+        <div class="photobtn" id="qfBtn"><span class="ico">📦</span><span class="lb">Front</span><span class="sub">package</span></div>
+        <div class="photobtn" id="qcBtn"><span class="ico">🏷️</span><span class="lb">Barcode / label</span><span class="sub">most accurate</span></div>
+      </div>
+      <input type="file" accept="image/*" id="qfInput" hidden>
+      <input type="file" accept="image/*" id="qcInput" hidden>
+      <div class="field" style="margin-top:12px"><label>Or type the barcode number</label>
+        <input id="qBarcode" inputmode="numeric" autocomplete="off" placeholder="8850001234567"></div>
+      <button class="btn" id="qRunBtn" style="width:100%">Check it</button>
+      <div class="hint">For something you haven't bought yet. It never touches your good/bad list unless you tap <b>Save</b> on the result.</div>
+    </div>
+    <div id="qResult"></div>
+  </section>
+
   <!-- ============ SETTINGS ============ -->
   <section id="view-settings" hidden>
     <div class="formcard">
@@ -439,6 +478,7 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
 
 <nav>
   <button id="navList" class="on"><span class="nico">📋</span>List</button>
+  <button id="navCheck"><span class="nico">🔍</span>Check</button>
   <button id="navAdd" class="addbig"><span class="nico">＋</span>Add</button>
   <button id="navSettings"><span class="nico">⚙️</span>Settings</button>
 </nav>
@@ -669,10 +709,11 @@ function mergeItems(local, remote) {
 }
 
 /* ---------------- views / router ---------------- */
-const views = { list: '#view-list', add: '#view-add', settings: '#view-settings' };
+const views = { list: '#view-list', add: '#view-add', check: '#view-check', settings: '#view-settings' };
 function showView(name) {
   for (const [k, sel] of Object.entries(views)) $(sel).hidden = (k !== name);
   $('#navList').classList.toggle('on', name === 'list');
+  $('#navCheck').classList.toggle('on', name === 'check');
   $('#navAdd').classList.toggle('on', name === 'add');
   $('#navSettings').classList.toggle('on', name === 'settings');
   window.scrollTo(0, 0);
@@ -735,22 +776,38 @@ const NUT_ROWS = [
   ['carbs', 'Carbs', 'g'], ['sugars', '— sugars', 'g'], ['fiber', 'Fiber', 'g'],
   ['protein', 'Protein', 'g'], ['salt', 'Salt', 'g']];
 
+/* shared renderers — used by the detail sheet and by Quick check */
+function nutriRowsHTML(it) {
+  const n = (it && it.nutrition) || {};
+  let rows = NUT_ROWS.filter(([k]) => n[k] !== null && n[k] !== undefined)
+    .map(([k, lb, u]) => `<tr><td>${lb}</td><td>${n[k]} ${u}</td></tr>`).join('');
+  if (n.protein != null && n.kcal) {
+    rows += `<tr><td><b>Protein per 100 kcal</b></td><td><b>${(n.protein / n.kcal * 100).toFixed(1)} g</b></td></tr>`;
+  }
+  const qm = String((it && it.quantity) || '').match(/([\d.]+)\s*(g|กรัม|ml|มล)/i);
+  if (qm && n.kcal != null) {
+    const W = parseFloat(qm[1]);
+    if (W > 0 && W < 2000) rows += `<tr><td><b>Whole pack (${esc(it.quantity)})</b></td><td><b>≈ ${Math.round(n.kcal * W / 100)} kcal</b></td></tr>`;
+  }
+  return rows;
+}
+function rateBoxHTML(it) {
+  const r = nutriRate(it);
+  if (!r) return '<div class="ratebox none">☆☆☆☆☆ <span>Rating needs calories plus protein or fibre</span></div>';
+  const li = a => a.map(x => `<li>${esc(x)}</li>`).join('');
+  return `<div class="ratebox s${r.stars}">
+    <div class="rtop"><span class="rstars">${starStr(r.stars)}</span><span class="rscore">${r.stars}/5 for your goals</span></div>
+    <div class="rppc"><b>${r.ppc != null ? r.ppc : "—"} g protein + ${r.fpc != null ? r.fpc : "—"} g fibre per 100 kcal</b><br><span style="font-size:12px;color:var(--muted)">quality index ${r.idx} (protein counts full, fibre 0.75×)</span></div>
+    <ul class="rlist">${li(r.plus)}${li(r.minus)}</ul>
+  </div>`;
+}
+
 async function openDetail(id) {
   const it = items.find(i => i.id === id);
   if (!it) return;
   openDetailId = id;
   const myToken = ++detailToken;   // abandon image work from a previous open
-  const n = it.nutrition || {};
-  let nutRows = NUT_ROWS.filter(([k]) => n[k] !== null && n[k] !== undefined)
-    .map(([k, lb, u]) => `<tr><td>${lb}</td><td>${n[k]} ${u}</td></tr>`).join('');
-  if (n.protein != null && n.kcal) {
-    nutRows += `<tr><td><b>Protein per 100 kcal</b></td><td><b>${(n.protein / n.kcal * 100).toFixed(1)} g</b></td></tr>`;
-  }
-  const qm = String(it.quantity || '').match(/([\d.]+)\s*(g|กรัม|ml|มล)/i);
-  if (qm && n.kcal != null) {
-    const W = parseFloat(qm[1]);
-    if (W > 0 && W < 2000) nutRows += `<tr><td><b>Whole pack (${esc(it.quantity)})</b></td><td><b>≈ ${Math.round(n.kcal * W / 100)} kcal</b></td></tr>`;
-  }
+  const nutRows = nutriRowsHTML(it);
   $('#sheetBody').innerHTML = `
     <div id="dImgWrap"></div>
     <div class="dtitle">${esc(it.name) || '(no name)'}</div>
@@ -764,13 +821,7 @@ async function openDetail(id) {
       <button class="vbtn bad ${it.status === 'bad' ? 'on' : ''}" id="dBad">✕ Bad</button>
     </div>
     ${it.notes ? `<div class="dnotes">${esc(it.notes)}</div>` : ''}
-    ${(() => { const r = nutriRate(it); if (!r) return '<div class="ratebox none">☆☆☆☆☆ <span>Rating needs calories plus protein or fibre</span></div>';
-      const li = a => a.map(x => `<li>${esc(x)}</li>`).join('');
-      return `<div class="ratebox s${r.stars}">
-        <div class="rtop"><span class="rstars">${starStr(r.stars)}</span><span class="rscore">${r.stars}/5 for your goals</span></div>
-        <div class="rppc"><b>${r.ppc != null ? r.ppc : "—"} g protein + ${r.fpc != null ? r.fpc : "—"} g fibre per 100 kcal</b><br><span style="font-size:12px;color:var(--muted)">quality index ${r.idx} (protein counts full, fibre 0.75\u00d7)</span></div>
-        <ul class="rlist">${li(r.plus)}${li(r.minus)}</ul>
-      </div>`; })()}
+    ${rateBoxHTML(it)}
     ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
     <div class="dmeta">${it.barcode ? 'Barcode ' + esc(it.barcode) + ' · ' : ''}Added ${new Date(it.createdAt).toLocaleDateString()}</div>
     ${it.pending ? '<div class="hint">🤖 Identifying in the background — details fill in automatically.</div>' : ''}
@@ -974,15 +1025,17 @@ function resetForm() {
   $('#detailsCard').hidden = true;
   $('#saveBtn').textContent = 'Save item';
 }
-function setSlotPreview(slot, dataURL) {
-  const btn = $(SLOT_BTN[slot]);
+function paintPreview(btn, dataURL, onClear) {
+  if (!btn) return;
   btn.querySelectorAll('img.prev,.clear').forEach(e => e.remove());
-  if (dataURL) {
-    const img = document.createElement('img'); img.className = 'prev'; img.src = dataURL;
-    const x = document.createElement('button'); x.className = 'clear'; x.textContent = '✕';
-    x.onclick = ev => { ev.stopPropagation(); draft.photos[slot] = null; setSlotPreview(slot, null); };
-    btn.append(img, x);
-  }
+  if (!dataURL) return;
+  const img = document.createElement('img'); img.className = 'prev'; img.src = dataURL;
+  const x = document.createElement('button'); x.className = 'clear'; x.textContent = '✕';
+  x.onclick = ev => { ev.stopPropagation(); onClear(); };
+  btn.append(img, x);
+}
+function setSlotPreview(slot, dataURL) {
+  paintPreview($(SLOT_BTN[slot]), dataURL, () => { draft.photos[slot] = null; setSlotPreview(slot, null); });
 }
 async function onSlotFile(slot, file) {
   toast('Processing photo…', 900);
@@ -1027,7 +1080,8 @@ async function saveForm() {
   const anyPhoto = SLOTS.some(s => draft.photos[s]);
   const wasEditing = !!editingId;
   if (!draft.status) { toast('Pick Good or Bad'); return; }
-  if (!anyPhoto && !wasEditing) { toast('Add at least one photo'); return; }
+  // a Quick check result may have come from a typed barcode alone — no photo needed
+  if (!anyPhoto && !wasEditing && !draft.prefill) { toast('Add at least one photo'); return; }
   savingNow = true;
   const btn = $('#saveBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
@@ -1036,12 +1090,21 @@ async function saveForm() {
   if (!it) { it = { id: uid(), createdAt: now, imgs: {}, nutrition: {} }; items.push(it); }
   const thumb = (draft.photos.f && draft.photos.f.thumb) || (draft.photos.b && draft.photos.b.thumb)
     || (draft.photos.c && draft.photos.c.thumb) || it.thumb || '';
-  if (wasEditing) {
+  if (wasEditing || draft.prefill) {
     Object.assign(it, {
       name: $('#fName').value.trim(), brand: $('#fBrand').value.trim(),
       category: $('#fCat').value.trim(), nutrition: nutFromInputs()
     });
   }
+  if (!wasEditing && draft.prefill) {           // arrived from Quick check — details already known
+    const p = draft.prefill;
+    if (p.quantity) it.quantity = p.quantity;
+    if (p.barcode) it.barcode = p.barcode;
+    if (p.nutriscore) it.nutriscore = p.nutriscore;
+    if (p.nova) it.nova = p.nova;
+    if (p.nutriSource) it.nutriSource = p.nutriSource;
+  }
+  const prefilled = !wasEditing && !!draft.prefill && !!it.name;
   Object.assign(it, { status: draft.status, notes: $('#fNotes').value.trim(), thumb, updatedAt: now });
   it.imgs = it.imgs || {};
   for (const s of SLOTS) {
@@ -1052,10 +1115,16 @@ async function saveForm() {
     }
   }
   it.hasImage = !!(it.imgs.f || it.imgs.b || it.imgs.c || it.hasImage);
-  if (!wasEditing) it.pending = 1;
+  if (!wasEditing) {
+    it.pending = prefilled ? 0 : 1;
+    if (prefilled) { it.offDone = 1; it.aiDone = 1; }   // already identified in Quick check
+    // saved from a typed barcode with no photo — go find a package shot on the web
+    if (prefilled && !anyPhoto) it.suggestWanted = 1;
+  }
   await dbSetMeta('imgDirty', [...imgDirty]);
   await dbPutItem(clean(it));
-  toast(wasEditing ? 'Updated' : (draft.status === 'good' ? 'Saved to whitelist ✓ — identifying…' : 'Saved to blacklist ✕ — identifying…'));
+  toast(wasEditing ? 'Updated'
+    : (draft.status === 'good' ? 'Saved to whitelist ✓' : 'Saved to blacklist ✕') + (prefilled ? '' : ' — identifying…'));
   resetForm(); showView('list');
   queueSync(); processQueue();
   try { const reg = await navigator.serviceWorker.ready; if ('sync' in reg) await reg.sync.register('fc-enrich'); } catch (e) {}
@@ -1210,6 +1279,207 @@ async function enrichItem(it) {
   if (it.name && !document.hidden && !viewingThis) toast('✓ Identified: ' + it.name);
   return 'done';
 }
+/* ================= quick check — identify WITHOUT saving =================
+   Same identification pipeline as a saved item (barcode -> Open Food Facts
+   -> AI), but nothing is written to IndexedDB, nothing syncs, and nothing
+   shows up in the good/bad list unless the user taps Save on the result. */
+let qPhotos = { f: null, c: null };
+let qResult = null;
+let qBusy = false;
+const Q_SLOTS = ['f', 'c'];
+const Q_SLOT_BTN = { f: '#qfBtn', c: '#qcBtn' };
+const Q_SLOT_INPUT = { f: '#qfInput', c: '#qcInput' };
+const Q_VERDICT = {
+  5: { word: 'Great choice', sub: 'Strong for your goals', cls: 'good' },
+  4: { word: 'Good choice',  sub: 'Works for your goals',  cls: 'good' },
+  3: { word: 'Okay',         sub: 'Fine now and then',     cls: 'mid'  },
+  2: { word: 'Not great',    sub: 'Better options exist',  cls: 'bad'  },
+  1: { word: 'Avoid',        sub: 'Poor for your goals',   cls: 'bad'  }
+};
+
+function startCheck() { resetCheck(); showView('check'); }
+function resetCheck() {
+  qPhotos = { f: null, c: null };
+  qResult = null;
+  const bc = $('#qBarcode'); if (bc) bc.value = '';
+  for (const s of Q_SLOTS) paintPreview($(Q_SLOT_BTN[s]), null, () => {});
+  const box = $('#qResult'); if (box) box.innerHTML = '';
+  const btn = $('#qRunBtn'); if (btn) { btn.disabled = false; btn.textContent = 'Check it'; }
+}
+function clearQSlot(slot) {
+  qPhotos[slot] = null;
+  paintPreview($(Q_SLOT_BTN[slot]), null, () => {});
+}
+async function onCheckFile(slot, file) {
+  toast('Processing photo…', 900);
+  try {
+    const { fullBlob, thumb } = await compressPhoto(file);
+    qPhotos[slot] = { fullBlob, thumb };
+    paintPreview($(Q_SLOT_BTN[slot]), thumb, () => clearQSlot(slot));
+  } catch (e) { toast('Could not read that photo'); }
+}
+
+/* photos: [{slot, blob, b64}] — returns a plain object, never touches the DB */
+async function identifyNoSave(photos, typedBarcode, onStep) {
+  const step = onStep || (() => {});
+  const it = { nutrition: {}, _src: [] };
+  const typed = String(typedBarcode || '').replace(/\D/g, '');
+  if (typed) { it.barcode = typed; it._src.push('barcode you typed'); }
+  if (!it.barcode && photos.length) {
+    step('Reading the barcode…');
+    const order = { c: 0, f: 1 };
+    for (const p of [...photos].sort((a, b) => order[a.slot] - order[b.slot])) {
+      try {
+        const code = await decodeBarcodeFile(p.blob);
+        if (code) { it.barcode = code; it._src.push('barcode read from your photo'); break; }
+      } catch (e) {}
+    }
+  }
+  if (it.barcode) {
+    step('Looking it up…');
+    try {
+      const off = await lookupBarcode(it.barcode);
+      if (off) { offToItem(it, off); it._src.push('official label data (Open Food Facts)'); }
+      else it._src.push('not found in Open Food Facts');
+    } catch (e) { it._src.push('could not reach Open Food Facts'); }
+  }
+  const needsAI = !it.name || it.nutrition.kcal == null;
+  if (needsAI && photos.length && settings.aiKey) {
+    step('Identifying with AI…');
+    try {
+      aiToItem(it, await aiIdentify(photos.map(p => p.b64)));
+      it._src.push(it.nutriSource === 'label' ? 'AI read the nutrition label' : 'AI estimate for this product');
+    } catch (e) { it._aiErr = e.message; }
+  } else if (needsAI && photos.length && !settings.aiKey) {
+    it._noKey = 1;
+  }
+  return it;
+}
+
+async function runCheck() {
+  if (qBusy) return;
+  const typed = ($('#qBarcode').value || '').trim();
+  const slots = Q_SLOTS.filter(s => qPhotos[s]);
+  if (!slots.length && !typed) { toast('Add a photo or type a barcode'); return; }
+  if (!navigator.onLine) { toast('You are offline — quick check needs a connection', 3600); return; }
+  qBusy = true;
+  const btn = $('#qRunBtn');
+  btn.disabled = true;
+  const step = m => { btn.innerHTML = '<span class="qspin"></span>' + esc(m); };
+  step('Checking…');
+  $('#qResult').innerHTML = '';
+  try {
+    const photos = [];
+    for (const s of slots) {
+      photos.push({ slot: s, blob: qPhotos[s].fullBlob, b64: await blobToB64(qPhotos[s].fullBlob) });
+    }
+    qResult = await identifyNoSave(photos, typed, step);
+    renderCheckResult();
+    const box = $('#qResult');
+    if (box.firstElementChild) box.firstElementChild.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    toast('Check failed: ' + (e.message || e), 4500);
+  } finally {
+    qBusy = false;
+    btn.disabled = false;
+    btn.textContent = 'Check again';
+  }
+}
+
+const QM_FIELDS = [['kcal', 'Calories (kcal)'], ['protein', 'Protein (g)'], ['fiber', 'Fiber (g)'],
+                   ['sugars', 'Sugars (g)'], ['satfat', 'Saturated fat (g)'], ['salt', 'Salt (g)']];
+
+function renderCheckResult() {
+  const box = $('#qResult');
+  if (!qResult) { box.innerHTML = ''; return; }
+  const it = qResult;
+  const r = nutriRate(it);
+  const v = r ? Q_VERDICT[r.stars] : null;
+  const rows = nutriRowsHTML(it);
+  const thumb = (qPhotos.f && qPhotos.f.thumb) || (qPhotos.c && qPhotos.c.thumb) || '';
+  const pills = [
+    it.nutriscore && NS_COLORS[it.nutriscore]
+      ? `<span class="scorepill" style="background:${NS_COLORS[it.nutriscore]}">Nutri-Score ${esc(it.nutriscore)}</span>` : '',
+    it.nova ? `<span class="scorepill" style="background:#6b7280">NOVA ${esc(it.nova)}</span>` : ''
+  ].join('');
+  const manual = `
+    <div class="qsavewrap">
+      <div class="hint" style="margin-top:0">Type what the label says (per 100 g) and it rates instantly — still nothing saved.</div>
+      <div class="nutgrid" style="margin-top:10px">
+        ${QM_FIELDS.map(([k, lb]) => `<div class="field"><label>${lb}</label><input id="qm_${k}" type="number" step="any" inputmode="decimal" value="${(it.nutrition && it.nutrition[k] != null) ? it.nutrition[k] : ''}"></div>`).join('')}
+      </div>
+      <button class="btn sm" id="qmApply" style="margin-top:12px;width:100%">Rate these numbers</button>
+    </div>`;
+  box.innerHTML = `
+    <div class="formcard">
+      <div class="qbanner ${v ? v.cls : 'none'}">
+        <div class="qstars">${r ? starStr(r.stars) : '☆☆☆☆☆'}</div>
+        <div class="qword">${v ? esc(v.word) : 'Not enough to judge'}</div>
+        <div class="qsub">${v ? esc(v.sub) : 'Needs calories plus protein or fibre'}</div>
+      </div>
+      ${thumb ? `<img class="rvimg" src="${esc(thumb)}" alt="" style="width:100%;max-width:150px;margin:14px auto 0">` : ''}
+      <div class="qname">${esc(it.name) || 'Could not identify it'}</div>
+      <div class="qbrand">${esc([it.brand, it.category, it.quantity].filter(Boolean).join(' · ')) || (it.barcode ? 'Barcode ' + esc(it.barcode) : 'No product details')}</div>
+      ${pills ? `<div class="scorebadges" style="margin-top:8px">${pills}</div>` : ''}
+      ${r ? rateBoxHTML(it) : ''}
+      ${rows ? `<div class="hint" style="margin-top:12px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated, not read from a label' : ''}</div>
+        <table class="nutritable"><tbody>${rows}</tbody></table>` : ''}
+      <div class="qsrc">${it._src && it._src.length ? 'Source: ' + esc(it._src.join(' · ')) : ''}
+        ${it._noKey ? '<br>Add an AI key in Settings to identify products that have no barcode match.' : ''}
+        ${it._aiErr ? '<br>AI could not be reached: ' + esc(String(it._aiErr).slice(0, 120)) : ''}
+        <br><b>Nothing was saved.</b> This check is not in your list.</div>
+      ${r ? '' : manual}
+      <div class="qsavewrap">
+        <div class="hint" style="margin-top:0">Want to keep it after all?</div>
+        <div class="verdict" style="margin-top:10px">
+          <button class="vbtn good" id="qSaveGood">✓ Save as Good</button>
+          <button class="vbtn bad" id="qSaveBad">✕ Save as Bad</button>
+        </div>
+      </div>
+      <div class="qactions">
+        <button class="btn ghost" id="qAnother">Check another</button>
+        <button class="btn ghost" id="qDone">Done</button>
+      </div>
+    </div>`;
+  const ap = $('#qmApply');
+  if (ap) ap.onclick = () => {
+    it.nutrition = it.nutrition || {};
+    for (const [k] of QM_FIELDS) it.nutrition[k] = num($('#qm_' + k).value);
+    if (!it.nutriSource) it.nutriSource = 'label';
+    renderCheckResult();
+    window.scrollTo(0, 0);
+  };
+  $('#qSaveGood').onclick = () => checkToAdd('good');
+  $('#qSaveBad').onclick = () => checkToAdd('bad');
+  $('#qAnother').onclick = () => { resetCheck(); window.scrollTo(0, 0); };
+  $('#qDone').onclick = () => { resetCheck(); showView('list'); };
+}
+
+/* move a quick-check result into the normal add form, pre-filled */
+function checkToAdd(status) {
+  const src = qResult || {};
+  const photos = { f: qPhotos.f, c: qPhotos.c };
+  resetForm();
+  draft.status = status;
+  draft.photos.f = photos.f; draft.photos.c = photos.c;
+  for (const s of ['f', 'c']) setSlotPreview(s, draft.photos[s] ? draft.photos[s].thumb : null);
+  draft.prefill = {
+    name: src.name || '', brand: src.brand || '', category: src.category || '',
+    quantity: src.quantity || '', barcode: src.barcode || '',
+    nutriscore: src.nutriscore || '', nova: src.nova || null,
+    nutriSource: src.nutriSource || '', nutrition: { ...(src.nutrition || {}) }
+  };
+  $('#fName').value = draft.prefill.name;
+  $('#fBrand').value = draft.prefill.brand;
+  $('#fCat').value = draft.prefill.category;
+  fillNutrition(draft.prefill.nutrition);
+  $('#vGood').classList.toggle('on', status === 'good');
+  $('#vBad').classList.toggle('on', status === 'bad');
+  $('#detailsCard').hidden = false;
+  showView('add');
+  toast('Check the details, then Save item');
+}
+
 /* ---------------- better-photo suggestions ---------------- */
 let chooserId = null;
 let openDetailId = null;
@@ -1709,6 +1979,7 @@ async function importJSON(file) {
 /* ---------------- events ---------------- */
 function bindEvents() {
   $('#navList').onclick = () => showView('list');
+  $('#navCheck').onclick = startCheck;
   $('#navAdd').onclick = startAdd;
   $('#navSettings').onclick = () => showView('settings');
   $('#syncBtn').onclick = () => syncNow(false);
@@ -1766,6 +2037,16 @@ function bindEvents() {
       if (f) onSlotFile(s, f);
     });
   }
+  for (const s of Q_SLOTS) {
+    $(Q_SLOT_BTN[s]).addEventListener('click', () => $(Q_SLOT_INPUT[s]).click());
+    $(Q_SLOT_INPUT[s]).addEventListener('change', e => {
+      const f = e.target.files[0]; e.target.value = '';
+      if (f) onCheckFile(s, f);
+    });
+  }
+  $('#qRunBtn').onclick = runCheck;
+  $('#qBarcode').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runCheck(); } });
+
   $('#backBtn').onclick = () => { resetForm(); showView('list'); };
   $('#vGood').onclick = () => { draft.status = 'good'; $('#vGood').classList.add('on'); $('#vBad').classList.remove('on'); };
   $('#vBad').onclick = () => { draft.status = 'bad'; $('#vBad').classList.add('on'); $('#vGood').classList.remove('on'); };
@@ -1867,6 +2148,9 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
   mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, nutriRate, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
+  identifyNoSave, runCheck, startCheck, resetCheck, renderCheckResult, checkToAdd, rateBoxHTML, nutriRowsHTML,
+  qState: () => ({ qResult, qPhotos, qBusy }),
+  setQ: (res, photos) => { qResult = res; if (photos) qPhotos = photos; },
   state: () => ({ items, filter }),
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
