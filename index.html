@@ -127,6 +127,14 @@ section[hidden]{display:none}
 .rvname{font-size:21px;font-weight:750;letter-spacing:-.02em;margin-top:4px}
 
 .pendchip.dup{background:rgba(217,119,6,.9)}
+.disagree{position:absolute;top:9px;right:9px;background:rgba(124,58,237,.92);color:#fff;
+  font-size:10px;font-weight:800;padding:4px 8px;border-radius:999px;letter-spacing:.02em}
+.whorow{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 4px}
+.whochip{font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:999px;
+  border:1px solid var(--line);background:var(--bg);color:var(--muted)}
+.whochip.good{color:var(--good);border-color:var(--good)}
+.whochip.bad{color:var(--bad);border-color:var(--bad)}
+.whochip.mine{outline:2px solid color-mix(in srgb, var(--accent) 35%, transparent);outline-offset:1px}
 .pendchip{position:absolute;bottom:8px;left:8px;background:rgba(15,23,42,.72);color:#fff;
   font-size:10.5px;padding:4px 9px;border-radius:999px;font-weight:600;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 
@@ -414,6 +422,12 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
       <h3>Account</h3>
       <div class="stack">
         <div class="hint" id="acctStatus"></div>
+        <div class="field"><label>Your name (so verdicts show who's who)</label>
+          <input id="sUserName" placeholder="e.g. Cory" autocomplete="off"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn sm" id="sNameSave">Save name</button>
+          <button class="btn sm ghost" id="sClaim">Mark existing items as mine</button>
+        </div>
         <div style="display:flex;gap:8px">
           <button class="btn sm" id="loginBtn">Log in with password</button>
           <button class="btn sm ghost" id="logoutBtn">Log out of this device</button>
@@ -630,6 +644,43 @@ let syncing = false;
 
 const live = () => items.filter(i => !i.deletedAt);
 
+/* ---- per-person verdicts -------------------------------------------------
+   verdicts: { "Cory": {v:'good', t:169...}, "Jane": {v:'bad', t:169...} }
+   Taste is personal, so each person keeps their own. Nutrition stars stay
+   objective. Legacy items (status only, no verdicts) still display fine. */
+const meId = () => (settings.userName || '').trim();
+function verdictEntries(it) {
+  const v = (it && it.verdicts) || {};
+  return Object.keys(v).filter(k => v[k] && v[k].v).map(k => ({ who: k, v: v[k].v, t: v[k].t || 0 }));
+}
+function deriveStatus(it) {
+  const me = meId(), v = (it && it.verdicts) || {};
+  if (me && v[me] && v[me].v) return v[me].v;              // my own opinion wins for me
+  const others = verdictEntries(it).sort((a, b) => b.t - a.t);
+  return others.length ? others[0].v : (it && it.status);  // else newest other, else legacy
+}
+function myVerdict(it) {
+  const me = meId(), v = (it && it.verdicts) || {};
+  return me && v[me] ? v[me].v : null;
+}
+function othersVerdicts(it) { const me = meId(); return verdictEntries(it).filter(e => e.who !== me); }
+function disagrees(it) { return new Set(verdictEntries(it).map(e => e.v)).size > 1; }
+function setMyVerdict(it, val) {
+  const me = meId();
+  if (me) { it.verdicts = it.verdicts || {}; it.verdicts[me] = { v: val, t: Date.now() }; }
+  it.status = val;                                          // legacy mirror for old clients
+}
+function mergeVerdicts(a, b) {
+  const out = {};
+  for (const src of [a || {}, b || {}]) for (const k of Object.keys(src)) {
+    const e = src[k];
+    if (!e || !e.v) continue;
+    if (!out[k] || (e.t || 0) > (out[k].t || 0)) out[k] = { v: e.v, t: e.t || 0 };
+  }
+  return out;
+}
+const sameVerdicts = (a, b) => JSON.stringify(a || {}) === JSON.stringify(b || {});
+
 /* Nutrition rating 1-5, tuned for fat-loss + muscle.
    Core metric: quality density = (protein + 0.75 x fibre) per 100 kcal.
    Protein is weighted higher (muscle), fibre still counts properly (satiety, gut),
@@ -700,9 +751,20 @@ function mergeItems(local, remote) {
   const localIds = new Set(local.map(l => l.id));
   for (const l of local) {
     const r = map.get(l.id);
-    if (!r) { map.set(l.id, l); localAhead = true; }
-    else if ((l.updatedAt || 0) > (r.updatedAt || 0)) { map.set(l.id, l); localAhead = true; }
-    else if ((r.updatedAt || 0) > (l.updatedAt || 0)) { remoteApplied = true; }
+    if (!r) { map.set(l.id, l); localAhead = true; continue; }
+    const winner = (l.updatedAt || 0) >= (r.updatedAt || 0) ? l : r;
+    if ((l.updatedAt || 0) > (r.updatedAt || 0)) localAhead = true;
+    else if ((r.updatedAt || 0) > (l.updatedAt || 0)) remoteApplied = true;
+    // verdicts merge per person instead of whole-item overwrite,
+    // so two people rating the same product never clobber each other
+    const lv = l.verdicts, rv = r.verdicts;          // snapshot BEFORE assigning:
+    const merged = mergeVerdicts(lv, rv);            // winner may BE r, and writing
+    if (Object.keys(merged).length) {                // winner.verdicts would mutate rv
+      if (!sameVerdicts(merged, rv)) localAhead = true;
+      if (!sameVerdicts(merged, lv)) remoteApplied = true;
+      winner.verdicts = merged;
+    }
+    map.set(l.id, winner);
   }
   for (const r of remote) if (!localIds.has(r.id)) remoteApplied = true;
   return { merged: [...map.values()], localAhead, remoteApplied };
@@ -730,7 +792,7 @@ function matches(it, q) {
   return q.toLowerCase().split(/\s+/).every(w => hay.includes(w));
 }
 function renderList() {
-  let list = live().filter(i => (filter === 'all' || i.status === filter) && matches(i, searchQ));
+  let list = live().filter(i => (filter === 'all' || deriveStatus(i) === filter) && matches(i, searchQ));
   if (nutMin) list = list.filter(i => { const r = nutriRate(i); return r && r.stars >= nutMin; });
   list.sort(sortMode === 'az'
     ? (a, b) => (a.name || '').localeCompare(b.name || '')
@@ -738,8 +800,8 @@ function renderList() {
     ? (a, b) => ((nutriRate(b) || {}).score || -1) - ((nutriRate(a) || {}).score || -1)
     : (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-  const g = live().filter(i => i.status === 'good').length;
-  const b = live().filter(i => i.status === 'bad').length;
+  const g = live().filter(i => deriveStatus(i) === 'good').length;
+  const b = live().filter(i => deriveStatus(i) === 'bad').length;
   $('#countLine').textContent = `${list.length} shown · ${g} good · ${b} bad${nutMin ? ' · ★' + nutMin + '+ only' : ''}`;
 
   const wrap = $('#cards');
@@ -752,8 +814,9 @@ function renderList() {
   wrap.innerHTML = list.map(it => `
     <div class="card" data-id="${esc(it.id)}">
       ${it.thumb ? `<img class="ph" src="${esc(it.thumb)}" alt="" loading="lazy">`
-                 : `<div class="noph">${it.status === 'bad' ? '✕' : '🛒'}</div>`}
-      <span class="badge ${it.status}">${it.status === 'good' ? '✓ GOOD' : '✕ BAD'}</span>
+                 : `<div class="noph">${deriveStatus(it) === 'bad' ? '✕' : '🛒'}</div>`}
+      <span class="badge ${deriveStatus(it)}">${deriveStatus(it) === 'good' ? '✓ GOOD' : '✕ BAD'}</span>
+      ${disagrees(it) ? '<span class="disagree" title="You two disagree">⚡ split</span>' : ''}
       ${it.pending ? '<span class="pendchip">🤖 identifying…</span>'
         : dupPartner(it) ? '<span class="pendchip dup">⚠️ duplicate</span>' : ''}
       ${it.nutriscore && NS_COLORS[it.nutriscore] ?
@@ -817,9 +880,12 @@ async function openDetail(id) {
       ${it.nova ? `<span class="scorepill" style="background:#6b7280">NOVA ${esc(it.nova)}</span>` : ''}
     </div>
     <div class="dtoggles">
-      <button class="vbtn good ${it.status === 'good' ? 'on' : ''}" id="dGood">✓ Good</button>
-      <button class="vbtn bad ${it.status === 'bad' ? 'on' : ''}" id="dBad">✕ Bad</button>
+      <button class="vbtn good ${deriveStatus(it) === 'good' ? 'on' : ''}" id="dGood">✓ Good</button>
+      <button class="vbtn bad ${deriveStatus(it) === 'bad' ? 'on' : ''}" id="dBad">✕ Bad</button>
     </div>
+    ${(() => { const o = othersVerdicts(it); if (!o.length) return '';
+      return `<div class="whorow">${o.map(e => `<span class="whochip ${e.v}">${esc(e.who)}: ${e.v === 'good' ? '✓ good' : '✕ bad'}</span>`).join('')}
+        ${meId() ? `<span class="whochip mine ${myVerdict(it) || 'none'}">${esc(meId())}: ${myVerdict(it) ? (myVerdict(it) === 'good' ? '✓ good' : '✕ bad') : 'no call yet'}</span>` : ''}</div>`; })()}
     ${it.notes ? `<div class="dnotes">${esc(it.notes)}</div>` : ''}
     ${rateBoxHTML(it)}
     ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
@@ -928,7 +994,7 @@ function closeSheet() {
 }
 async function setStatus(id, st) {
   const it = items.find(i => i.id === id); if (!it) return;
-  it.status = st; it.updatedAt = Date.now();
+  setMyVerdict(it, st); it.updatedAt = Date.now();
   await dbPutItem(clean(it));
   openDetail(id); renderList(); queueSync();
 }
@@ -1062,12 +1128,12 @@ function startEdit(id) {
   const it = items.find(i => i.id === id); if (!it) return;
   resetForm();
   editingId = id;
-  draft.status = it.status;
+  draft.status = deriveStatus(it);
   $('#fName').value = it.name || ''; $('#fBrand').value = it.brand || '';
   $('#fCat').value = it.category || ''; $('#fNotes').value = it.notes || '';
   fillNutrition(it.nutrition);
-  $('#vGood').classList.toggle('on', it.status === 'good');
-  $('#vBad').classList.toggle('on', it.status === 'bad');
+  $('#vGood').classList.toggle('on', deriveStatus(it) === 'good');
+  $('#vBad').classList.toggle('on', deriveStatus(it) === 'bad');
   $('#photosCard').hidden = true;
   $('#detailsCard').hidden = false;
   $('#rvImgRow').innerHTML = it.thumb ? `<img class="rvimg" src="${esc(it.thumb)}" alt="">` : '';
@@ -1105,7 +1171,8 @@ async function saveForm() {
     if (p.nutriSource) it.nutriSource = p.nutriSource;
   }
   const prefilled = !wasEditing && !!draft.prefill && !!it.name;
-  Object.assign(it, { status: draft.status, notes: $('#fNotes').value.trim(), thumb, updatedAt: now });
+  setMyVerdict(it, draft.status);
+  Object.assign(it, { notes: $('#fNotes').value.trim(), thumb, updatedAt: now });
   it.imgs = it.imgs || {};
   for (const s of SLOTS) {
     if (draft.photos[s] && draft.photos[s].fullBlob) {
@@ -1887,6 +1954,7 @@ function renderSettings() {
     : 'Not logged in on this device. Enter your password to connect.';
   $('#loginBtn').hidden = loggedIn;
   $('#logoutBtn').hidden = !loggedIn;
+  $('#sUserName').value = settings.userName || '';
   $('#sRepo').value = settings.repo; $('#sToken').value = settings.token; $('#sBranch').value = settings.branch || 'main';
   $('#sAiKey').value = settings.aiKey || '';
   const g = live().filter(i => i.status === 'good').length;
@@ -2048,11 +2116,37 @@ function bindEvents() {
   $('#qBarcode').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runCheck(); } });
 
   $('#backBtn').onclick = () => { resetForm(); showView('list'); };
-  $('#vGood').onclick = () => { draft.status = 'good'; $('#vGood').classList.add('on'); $('#vBad').classList.remove('on'); };
-  $('#vBad').onclick = () => { draft.status = 'bad'; $('#vBad').classList.add('on'); $('#vGood').classList.remove('on'); };
+  const ensureName = () => {
+    if (meId() || settings.namePrompted) return;
+    settings.namePrompted = 1;
+    const n = prompt('Your first name?\n\nSo you and your partner each keep your own Good/Bad on shared items. Leave blank to skip.');
+    if (n && n.trim()) settings.userName = n.trim().slice(0, 24);
+    dbSetMeta('settings', { ...settings });
+  };
+  $('#vGood').onclick = () => { ensureName(); draft.status = 'good'; $('#vGood').classList.add('on'); $('#vBad').classList.remove('on'); };
+  $('#vBad').onclick = () => { ensureName(); draft.status = 'bad'; $('#vBad').classList.add('on'); $('#vGood').classList.remove('on'); };
   $('#saveBtn').onclick = saveForm;
 
   $('#sSave').onclick = saveSettings;
+  $('#sNameSave').onclick = async () => {
+    settings.userName = $('#sUserName').value.trim().slice(0, 24);
+    await dbSetMeta('settings', { ...settings });
+    renderSettings(); renderList();
+    toast(settings.userName ? 'Hi ' + settings.userName + ' — your verdicts are now labelled' : 'Name cleared');
+  };
+  $('#sClaim').onclick = async () => {
+    if (!meId()) { toast('Set your name first'); return; }
+    const orphans = live().filter(i => i.status && !verdictEntries(i).length);
+    if (!orphans.length) { toast('Nothing to claim'); return; }
+    if (!confirm(`Mark ${orphans.length} existing item(s) as rated by ${meId()}?`)) return;
+    for (const it of orphans) {
+      it.verdicts = { [meId()]: { v: it.status, t: it.updatedAt || Date.now() } };
+      it.updatedAt = Date.now();
+      await dbPutItem(clean(it));
+    }
+    renderList(); queueSync();
+    toast(`${orphans.length} item(s) now credited to ${meId()}`);
+  };
   $('#bundleBtn').onclick = exportBundle;
   $('#lockbtn').onclick = tryUnlock;
   $('#lockpw').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
@@ -2147,7 +2241,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, nutriRate, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
+  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, nutriRate, deriveStatus, setMyVerdict, mergeVerdicts, disagrees, myVerdict, othersVerdicts, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
   identifyNoSave, runCheck, startCheck, resetCheck, renderCheckResult, checkToAdd, rateBoxHTML, nutriRowsHTML,
   qState: () => ({ qResult, qPhotos, qBusy }),
   setQ: (res, photos) => { qResult = res; if (photos) qPhotos = photos; },
