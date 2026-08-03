@@ -284,10 +284,12 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
   background:rgba(0,0,0,.55);padding:3px 8px;border-radius:999px}
 .chbtns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
 .chbtns #chUse{background:linear-gradient(135deg,var(--good),var(--good-2));color:#fff}
-#imgZoom{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.92);display:flex;
-  align-items:center;justify-content:center;padding:12px}
+#imgZoom{position:fixed;inset:0;z-index:300;background:#000;display:flex;
+  align-items:center;justify-content:center;padding:0}
 #imgZoom[hidden]{display:none!important}
-#imgZoom img{max-width:100%;max-height:100%;object-fit:contain}
+#imgZoom img{max-width:100vw;max-height:100vh;width:100%;height:100%;object-fit:contain;pointer-events:none}
+.dimg{cursor:zoom-in}
+.dthumbs img{cursor:pointer}
 
 #toast{position:fixed;
 #toast{position:fixed;top:calc(env(safe-area-inset-top) + 12px);
@@ -422,12 +424,6 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
       <h3>Account</h3>
       <div class="stack">
         <div class="hint" id="acctStatus"></div>
-        <div class="field"><label>Your name (so verdicts show who's who)</label>
-          <input id="sUserName" placeholder="e.g. Cory" autocomplete="off"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn sm" id="sNameSave">Save name</button>
-          <button class="btn sm ghost" id="sClaim">Mark existing items as mine</button>
-        </div>
         <div style="display:flex;gap:8px">
           <button class="btn sm" id="loginBtn">Log in with password</button>
           <button class="btn sm ghost" id="logoutBtn">Log out of this device</button>
@@ -435,6 +431,15 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
       </div>
     </div>
     <div id="adminZone" hidden>
+    <div class="formcard">
+      <h3>Who is using this device</h3>
+      <div class="stack">
+        <div class="field"><label>Name on this device's verdicts</label>
+          <input id="sUserName" autocomplete="off"></div>
+        <button class="btn sm" id="sNameSave" style="align-self:flex-start">Save name</button>
+        <div class="hint">Defaults to Cory. Only change this on the second person's device.</div>
+      </div>
+    </div>
     <div class="formcard">
       <h3>GitHub sync (cross-device)</h3>
       <div class="stack">
@@ -883,22 +888,16 @@ async function openDetail(id) {
       <button class="vbtn good ${deriveStatus(it) === 'good' ? 'on' : ''}" id="dGood">✓ Good</button>
       <button class="vbtn bad ${deriveStatus(it) === 'bad' ? 'on' : ''}" id="dBad">✕ Bad</button>
     </div>
-    ${(() => { const o = othersVerdicts(it); if (!o.length) return '';
-      return `<div class="whorow">${o.map(e => `<span class="whochip ${e.v}">${esc(e.who)}: ${e.v === 'good' ? '✓ good' : '✕ bad'}</span>`).join('')}
-        ${meId() ? `<span class="whochip mine ${myVerdict(it) || 'none'}">${esc(meId())}: ${myVerdict(it) ? (myVerdict(it) === 'good' ? '✓ good' : '✕ bad') : 'no call yet'}</span>` : ''}</div>`; })()}
+    ${(() => { const all = verdictEntries(it); if (!all.length) return '';
+      const lbl = v => v === 'good' ? '✓ good' : '✕ bad';
+      return `<div class="whorow">${all.sort((a, b) => (a.who === meId() ? -1 : 1))
+        .map(e => `<span class="whochip ${e.v}${e.who === meId() ? ' mine' : ''}">${esc(e.who)}: ${lbl(e.v)}</span>`).join('')}</div>`; })()}
     ${it.notes ? `<div class="dnotes">${esc(it.notes)}</div>` : ''}
     ${rateBoxHTML(it)}
     ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
     <div class="dmeta">${it.barcode ? 'Barcode ' + esc(it.barcode) + ' · ' : ''}Added ${new Date(it.createdAt).toLocaleDateString()}</div>
     ${it.pending ? '<div class="hint">🤖 Identifying in the background — details fill in automatically.</div>' : ''}
     ${(() => { const d = dupPartner(it); return d ? `<div class="dupwarn">⚠️ Same barcode as <b>${esc(d.name || 'another item')}</b> — likely the same product saved twice.<button class="btn sm danger" id="dDelDup" style="margin-top:8px;width:100%">Delete this duplicate</button></div>` : ''; })()}
-    ${it.suggestWanted ? '<div class="hint">🔎 Searching the web for a better photo…</div>' : ''}
-    <button class="btn ghost" id="dImgSuggest" style="width:100%;margin-top:12px"${it.suggestWanted ? ' disabled' : ''}>${
-      it.suggestWanted ? '🔎 Searching…'
-      : it.suggestReady ? '🖼️ Choose new photo'
-      : it.suggestNone ? '✓ Checked — no web match · search again'
-      : it.suggestChecked ? '✓ Photo checked · look again'
-      : '🔍 Find a better photo on the web'}</button>
     <div class="drow">
       <button class="btn ghost" id="dIdentify">↻ Identify again</button>
       <button class="btn ghost" id="dEdit">Edit</button>
@@ -913,12 +912,18 @@ async function openDetail(id) {
   const thumbsRow = wrap.querySelector('.dthumbs');
   const addImg = blob => {
     const url = URL.createObjectURL(blob);
-    if (!wrap.querySelector('.dimg')) {
+    const hero = wrap.querySelector('.dimg');
+    if (!hero) {
       const img = document.createElement('img'); img.className = 'dimg'; img.src = url;
+      img.onclick = () => zoomImage(img.src);            // tap big photo -> full screen
       wrap.insertBefore(img, thumbsRow);
     } else {
       thumbsRow.hidden = false;
       const img = document.createElement('img'); img.src = url;
+      img.onclick = () => {                              // tap thumb -> swap into the big slot
+        const h = wrap.querySelector('.dimg');
+        const tmp = h.src; h.src = img.src; img.src = tmp;
+      };
       thumbsRow.appendChild(img);
     }
   };
@@ -938,6 +943,7 @@ async function openDetail(id) {
   if (myToken !== detailToken) return;
   if (!wrap.querySelector('.dimg') && it.thumb) {
     const img = document.createElement('img'); img.className = 'dimg'; img.src = it.thumb;
+    img.onclick = () => zoomImage(img.src);
     wrap.insertBefore(img, thumbsRow);
   }
 
@@ -948,17 +954,6 @@ async function openDetail(id) {
     await dbPutItem(clean(it));
     for (const s of SLOTS) await dbDelImage(it.id + '-' + s).catch(() => {});
     closeSheet(); renderList(); toast('Duplicate deleted'); queueSync();
-  };
-  const sgBtn = $('#dImgSuggest');
-  if (sgBtn) sgBtn.onclick = async () => {
-    if (it.suggestReady) { closeSheet(); openChooser(it.id); return; }
-    if (it.suggestWanted) { toast('Already searching — check back soon'); return; }
-    clearSuggest(it); delete it.suggestChecked;
-    it.suggestWanted = 1; it.updatedAt = Date.now();
-    await dbPutItem(clean(it));
-    toast('Searching the web for a better photo 🔎');
-    openDetail(it.id);
-    processQueue();
   };
   const idBtn = $('#dIdentify');
   if (idBtn) idBtn.onclick = async () => {
@@ -1334,6 +1329,9 @@ async function enrichItem(it) {
       if (isTransientErr(e.message)) { it.updatedAt = Date.now(); await dbPutItem(clean(it)); return 'retry'; }
       it.aiDone = 1;
     }
+  }
+  if (it.name && !it.suggestChecked && !it.suggestReady && !it.suggestWanted && !it.suggestNone) {
+    it.suggestWanted = 1;                      // one automatic web-photo check per item, ever
   }
   if (!it.name && !settings.aiKey) {
     // nothing more possible until logged in — keep queued
@@ -1728,6 +1726,11 @@ let enrichBusy = false, enrichFails = 0, enrichTimer = null, enrichAgain = false
 async function processQueue() {
   if (enrichBusy) { enrichAgain = true; return; }
   if (!navigator.onLine) return;
+  for (const it of live()) {
+    if (it.name && !it.pending && !it.suggestChecked && !it.suggestReady && !it.suggestWanted && !it.suggestNone) {
+      it.suggestWanted = 1; it.updatedAt = Date.now(); await dbPutItem(clean(it));
+    }
+  }
   const pend = live().filter(i => i.pending);
   const wantsPhoto = live().filter(i => i.suggestWanted && !i.suggestReady);
   if (!pend.length && !wantsPhoto.length) { enrichFails = 0; return; }
@@ -2116,15 +2119,8 @@ function bindEvents() {
   $('#qBarcode').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runCheck(); } });
 
   $('#backBtn').onclick = () => { resetForm(); showView('list'); };
-  const ensureName = () => {
-    if (meId() || settings.namePrompted) return;
-    settings.namePrompted = 1;
-    const n = prompt('Your first name?\n\nSo you and your partner each keep your own Good/Bad on shared items. Leave blank to skip.');
-    if (n && n.trim()) settings.userName = n.trim().slice(0, 24);
-    dbSetMeta('settings', { ...settings });
-  };
-  $('#vGood').onclick = () => { ensureName(); draft.status = 'good'; $('#vGood').classList.add('on'); $('#vBad').classList.remove('on'); };
-  $('#vBad').onclick = () => { ensureName(); draft.status = 'bad'; $('#vBad').classList.add('on'); $('#vGood').classList.remove('on'); };
+  $('#vGood').onclick = () => { draft.status = 'good'; $('#vGood').classList.add('on'); $('#vBad').classList.remove('on'); };
+  $('#vBad').onclick = () => { draft.status = 'bad'; $('#vBad').classList.add('on'); $('#vGood').classList.remove('on'); };
   $('#saveBtn').onclick = saveForm;
 
   $('#sSave').onclick = saveSettings;
@@ -2133,19 +2129,6 @@ function bindEvents() {
     await dbSetMeta('settings', { ...settings });
     renderSettings(); renderList();
     toast(settings.userName ? 'Hi ' + settings.userName + ' — your verdicts are now labelled' : 'Name cleared');
-  };
-  $('#sClaim').onclick = async () => {
-    if (!meId()) { toast('Set your name first'); return; }
-    const orphans = live().filter(i => i.status && !verdictEntries(i).length);
-    if (!orphans.length) { toast('Nothing to claim'); return; }
-    if (!confirm(`Mark ${orphans.length} existing item(s) as rated by ${meId()}?`)) return;
-    for (const it of orphans) {
-      it.verdicts = { [meId()]: { v: it.status, t: it.updatedAt || Date.now() } };
-      it.updatedAt = Date.now();
-      await dbPutItem(clean(it));
-    }
-    renderList(); queueSync();
-    toast(`${orphans.length} item(s) now credited to ${meId()}`);
   };
   $('#bundleBtn').onclick = exportBundle;
   $('#lockbtn').onclick = tryUnlock;
@@ -2219,6 +2202,15 @@ async function init() {
   items = (await dbAllItems()) || [];
   const st = await dbGetMeta('settings'); if (st) settings = Object.assign(settings, st);
   imgDirty = new Set((await dbGetMeta('imgDirty')) || []);
+  if (!settings.userName) {                       // fixed two-person app: this device is Cory
+    settings.userName = 'Cory';
+    await dbSetMeta('settings', { ...settings });
+  }
+  for (const it of items) {                       // credit pre-verdict items automatically
+    if (it.status && !it.deletedAt && !verdictEntries(it).length) {
+      it.verdicts = { [settings.userName]: { v: it.status, t: it.updatedAt || Date.now() } };
+    }
+  }
   for (const it of items) if (it.hasImage && !it.imgs) it.imgs = { f: 1 }; // legacy migration
   bindEvents();
   const cats = [...new Set(live().map(i => i.category).filter(Boolean))].sort();
@@ -2241,7 +2233,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, nutriRate, deriveStatus, setMyVerdict, mergeVerdicts, disagrees, myVerdict, othersVerdicts, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
+  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, nutriRate, zoomImage, deriveStatus, setMyVerdict, mergeVerdicts, disagrees, myVerdict, othersVerdicts, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
   identifyNoSave, runCheck, startCheck, resetCheck, renderCheckResult, checkToAdd, rateBoxHTML, nutriRowsHTML,
   qState: () => ({ qResult, qPhotos, qBusy }),
   setQ: (res, photos) => { qResult = res; if (photos) qPhotos = photos; },
