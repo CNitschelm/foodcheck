@@ -688,58 +688,86 @@ const sameVerdicts = (a, b) => JSON.stringify(a || {}) === JSON.stringify(b || {
 
 /* Nutrition rating 1-5, tuned for fat-loss + muscle.
    Core metric: quality density = (protein + 0.75 x fibre) per 100 kcal.
-   Protein is weighted higher (muscle), fibre still counts properly (satiety, gut),
-   and a food with BOTH is rewarded for both. Sugar / saturated fat / salt /
-   calorie density then adjust it. Computed live -> existing items rate automatically. */
+   Penalties are PROPORTIONAL ramps, not fixed steps, so 6 g salt hurts far more
+   than 1.5 g. Missing label values can no longer flatter a product: the score is
+   capped and flagged. Implausible labels (per-serving numbers passed off as
+   per-100 g) are flagged too. Computed live -> existing items re-rate themselves. */
 const FIBRE_WEIGHT = 0.75;
+const BASE_CURVE = [[0,10],[1.5,25],[3,40],[5,52],[7,64],[10,78],[15,93],[20,100]];
+function curve(x, pts) {
+  if (x <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+    if (x <= x1) return y0 + (x - x0) / (x1 - x0) * (y1 - y0);
+  }
+  return pts[pts.length - 1][1];
+}
+const ramp = (x, lo, hi, max) => x <= lo ? 0 : x >= hi ? max : (x - lo) / (hi - lo) * max;
 function nutriRate(it) {
   const n = (it && it.nutrition) || {};
   const kcal = num(n.kcal);
   if (kcal == null || kcal <= 0) return null;
   const protein = num(n.protein), fib = num(n.fiber);
-  if (protein == null && fib == null) return null;      // not enough to judge
+  if (protein == null && fib == null) return null;
   const sug = num(n.sugars), sat = num(n.satfat), salt = num(n.salt);
-  const plus = [], minus = [];
+  const fat = num(n.fat), carbs = num(n.carbs);
+  const plus = [], minus = [], r1 = v => Math.round(v * 10) / 10;
 
-  const ppc = protein == null ? null : protein / kcal * 100;   // g protein / 100 kcal
-  const fpc = fib == null ? null : fib / kcal * 100;           // g fibre   / 100 kcal
-  const idx = (ppc || 0) + FIBRE_WEIGHT * (fpc || 0);          // weighted quality density
+  const ppc = protein == null ? null : protein / kcal * 100;
+  const fpc = fib == null ? null : fib / kcal * 100;
+  const idx = (ppc || 0) + FIBRE_WEIGHT * (fpc || 0);
+  let score = curve(idx, BASE_CURVE);
 
-  let score = idx >= 15 ? 95 : idx >= 11 ? 85 : idx >= 8 ? 72 : idx >= 6 ? 60
-            : idx >= 4 ? 48 : idx >= 2.5 ? 35 : idx >= 1.5 ? 25 : 14;
-
-  const r1 = v => Math.round(v * 10) / 10;
   if (ppc != null && ppc >= 7) plus.push(`Strong protein per calorie (${r1(ppc)} g/100 kcal)`);
   else if (ppc != null && ppc >= 4) plus.push(`Reasonable protein (${r1(ppc)} g/100 kcal)`);
   else if (ppc != null) minus.push(`Little protein (${r1(ppc)} g/100 kcal)`);
   if (fpc != null && fpc >= 5) plus.push(`Fibre-rich for its calories (${r1(fpc)} g/100 kcal)`);
   else if (fpc != null && fpc >= 2.5) plus.push(`Useful fibre (${r1(fpc)} g/100 kcal)`);
-  if (ppc != null && fpc != null && ppc >= 4 && fpc >= 2.5) plus.push('Protein and fibre together');
+  if (fpc != null && fpc >= 7) { score += 4; plus.push('Very fibre-dense (whole-food territory)'); }
 
-  // whole-food sugar (arriving with fibre) is penalised less than added sugar
+  // ---- proportional penalties ----
   if (sug != null) {
-    const soften = fib == null ? 1 : fib >= 6 ? 0.35 : fib >= 3 ? 0.6 : 1;
-    if (sug >= 22) { score -= 15 * soften; minus.push('Very high sugar'); }
-    else if (sug >= 10) { score -= 8 * soften; minus.push(soften < 1 ? 'Sugary, but with fibre' : 'High sugar'); }
+    const soften = fib == null ? 1 : fib >= 6 ? 0.35 : fib >= 3 ? 0.6 : 1;   // sugar with fibre != added sugar
+    const p = ramp(sug, 5, 35, 20) * soften;
+    score -= p;
+    if (sug >= 20) minus.push(`Very high sugar (${r1(sug)} g/100 g)`);
+    else if (sug >= 10) minus.push(`High sugar (${r1(sug)} g/100 g)`);
     else if (sug <= 5) { score += 4; plus.push('Low sugar'); }
   }
   if (sat != null) {
-    if (sat >= 6) { score -= 10; minus.push('High saturated fat'); }
-    else if (sat >= 3) { score -= 4; minus.push('Some saturated fat'); }
+    score -= ramp(sat, 1.5, 15, 18);
+    if (sat >= 8) minus.push(`Very high saturated fat (${r1(sat)} g/100 g)`);
+    else if (sat >= 3) minus.push(`Some saturated fat (${r1(sat)} g/100 g)`);
     else if (sat <= 1.5) { score += 3; plus.push('Low saturated fat'); }
   }
   if (salt != null) {
-    if (salt >= 1.5) { score -= 6; minus.push('High salt'); }
-    else if (salt >= 1.0) { score -= 3; minus.push('Fairly salty'); }
+    score -= ramp(salt, 0.5, 3.5, 25);
+    if (salt >= 3) minus.push(`Extremely salty (${r1(salt)} g/100 g)`);
+    else if (salt >= 1.5) minus.push(`Very salty (${r1(salt)} g/100 g)`);
+    else if (salt >= 0.9) minus.push(`Fairly salty (${r1(salt)} g/100 g)`);
   }
-  if (kcal >= 450) { score -= 6; minus.push('Calorie-dense — watch portions'); }
-  else if (kcal >= 350) { score -= 3; minus.push('Fairly calorie-dense'); }
+  score -= ramp(kcal, 300, 550, 6);
+  if (kcal >= 450) minus.push('Calorie-dense — watch portions');
   else if (kcal <= 120) { score += 5; plus.push('Low calorie density — filling'); }
 
+  // ---- data quality ----
+  const missing = [['sugar', sug], ['saturated fat', sat], ['salt', salt]].filter(m => m[1] == null).map(m => m[0]);
+  const macroKcal = (protein != null && carbs != null && fat != null) ? 4 * protein + 4 * carbs + 9 * fat : null;
+  const implausible = macroKcal != null && (macroKcal > kcal * 1.5 || macroKcal < kcal * 0.6);
+
   score = Math.max(0, Math.min(100, score));
-  const stars = score >= 80 ? 5 : score >= 62 ? 4 : score >= 45 ? 3 : score >= 28 ? 2 : 1;
+  let stars = score >= 80 ? 5 : score >= 62 ? 4 : score >= 45 ? 3 : score >= 28 ? 2 : 1;
+  if (missing.length) {                       // unknown values must not flatter a product
+    stars = Math.min(stars, missing.length >= 2 ? 3 : 4);
+    minus.push('Label incomplete — no ' + missing.join(' / ') + ' figure');
+  }
+  if (implausible) {
+    stars = Math.min(stars, 4);
+    minus.push('Label numbers don’t add up — may be per serving, not per 100 g');
+  }
   return { stars, score: Math.round(score), idx: r1(idx),
-           ppc: ppc == null ? null : r1(ppc), fpc: fpc == null ? null : r1(fpc), plus, minus };
+           ppc: ppc == null ? null : r1(ppc), fpc: fpc == null ? null : r1(fpc),
+           missing, implausible, plus, minus };
 }
 const starStr = s => '★'.repeat(s) + '☆'.repeat(5 - s);
 function dupPartner(it) {
