@@ -757,15 +757,13 @@ function nutriRate(it) {
   const implausible = macroKcal != null && (macroKcal > kcal * 1.5 || macroKcal < kcal * 0.6);
 
   score = Math.max(0, Math.min(100, score));
-  let stars = score >= 80 ? 5 : score >= 62 ? 4 : score >= 45 ? 3 : score >= 28 ? 2 : 1;
-  if (missing.length) {                       // unknown values must not flatter a product
-    stars = Math.min(stars, missing.length >= 2 ? 3 : 4);
-    minus.push('Label incomplete — no ' + missing.join(' / ') + ' figure');
-  }
-  if (implausible) {
-    stars = Math.min(stars, 4);
-    minus.push('Label numbers don’t add up — may be per serving, not per 100 g');
-  }
+  const stars = score >= 80 ? 5 : score >= 62 ? 4 : score >= 45 ? 3 : score >= 28 ? 2 : 1;
+  const derived = (it && it.derived) || [];
+  if (derived.length) plus.push('Estimated (not on label): ' + derived.join(', '));
+  if (missing.length) minus.push('Still unknown: ' + missing.join(' / '));
+  if (it && it.autoScaled) plus.push('Converted per-serving to per 100 g (x' + it.autoScaled + ')');
+  if (it && it.dataWarn) minus.push(it.dataWarn);
+  if (implausible) minus.push('Label numbers do not add up - check the packet');
   return { stars, score: Math.round(score), idx: r1(idx),
            ppc: ppc == null ? null : r1(ppc), fpc: fpc == null ? null : r1(fpc),
            missing, implausible, plus, minus };
@@ -1280,6 +1278,40 @@ async function callGemini(imgs, model) {
 function isTransientErr(msg) {
   return /(^|[^0-9])(429|500|502|503|504)([^0-9]|$)|overloaded|high demand|unavailable|resource.?exhausted|failed to fetch|network|timeout|abort|no product name|unreadable AI reply/i.test(String(msg));
 }
+async function aiFillGaps(it, missing) {
+  if (!settings.aiKey || !it.name || !missing.length) return false;
+  const prompt = 'Typical nutrition for this exact packaged product, per 100 g. Product: "' +
+    [it.brand, it.name, it.quantity].filter(Boolean).join(' ') + '". ' +
+    'Reply ONLY minified JSON with these keys (numbers, per 100 g, no text): {' +
+    missing.map(k => '"' + k + '":0').join(',') + '}. Use realistic values for this product category. ' +
+    'If a value is genuinely near zero, say 0.';
+  const isG = /^(AIza|AQ[.])/.test(settings.aiKey);
+  const r = isG
+    ? await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent', {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': settings.aiKey },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 400, responseMimeType: 'application/json' } }),
+        signal: withTimeout(45000) })
+    : await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST', headers: { 'x-api-key': settings.aiKey, 'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true', 'content-type': 'application/json' },
+        body: JSON.stringify({ model: AI_MODEL, max_tokens: 400, messages: [{ role: 'user', content: prompt }] }),
+        signal: withTimeout(45000) });
+  if (!r.ok) throw new Error('gap-fill ' + r.status);
+  const j = await r.json();
+  const txt = isG
+    ? ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('')
+    : ((j.content && j.content[0] && j.content[0].text) || '');
+  const d = extractJSON(txt);
+  it.nutrition = it.nutrition || {};
+  it.derived = it.derived || [];
+  let filled = 0;
+  for (const k of missing) {
+    const v = num(d[k]);
+    if (v != null && it.nutrition[k] == null) { it.nutrition[k] = v; if (!it.derived.includes(k)) it.derived.push(k); filled++; }
+  }
+  return filled > 0;
+}
 async function aiIdentify(imgs) {
   if (!/^(AIza|AQ[.])/.test(settings.aiKey)) return callAnthropic(imgs);
   let lastErr = null;
@@ -1291,6 +1323,54 @@ async function aiIdentify(imgs) {
 }
 
 /* ---------------- background enrichment queue ---------------- */
+const KCAL_RANGES = [
+  [/oil|ghee|lard|butter\b/i, 600, 900],
+  [/nut\b|nuts|almond|cashew|peanut|pistachio|walnut/i, 450, 720],
+  [/chocolate|candy|confection/i, 350, 620],
+  [/chip|crisp|cracker|biscuit|cookie|granola|cereal|muesli/i, 300, 620],
+  [/cheese|cheddar|mozzarella|stringer|halloumi|parmesan/i, 180, 460],
+  [/salami|sausage|bacon|chorizo|pepperoni/i, 200, 560],
+  [/jerky|jerkey|biltong|dried meat|pork crunch|pork rind|crackling/i, 180, 620],
+  [/yogh?urt|yogurt|kefir/i, 25, 200],
+  [/milk|juice|drink|soda|beverage|water|tea|coffee/i, 0, 100],
+  [/berry|berries|fruit|vegetable|veg\b|salad|greens/i, 10, 150],
+  [/chicken|beef|pork|fish|tuna|salmon|turkey|meat|prawn|shrimp/i, 70, 450],
+  [/bread|rice|pasta|noodle|tortilla|wrap/i, 80, 400]
+];
+function expectedKcalRange(it) {
+  const hay = ((it && it.name) || '') + ' ' + ((it && it.category) || '');
+  for (const [re, lo, hi] of KCAL_RANGES) if (re.test(hay)) return [lo, hi];
+  return null;
+}
+function servingGrams(it) {
+  const m = String((it && it.quantity) || '').match(/([\d.]+)\s*(g|ml)\b/i);
+  return m ? parseFloat(m[1]) : null;
+}
+function plausibility(it) {
+  const kcal = num(((it && it.nutrition) || {}).kcal);
+  const rng = expectedKcalRange(it);
+  if (kcal == null || kcal <= 0 || !rng) return null;
+  if (kcal >= rng[0] && kcal <= rng[1]) return null;
+  if (kcal < rng[0]) {
+    const mid = (rng[0] + rng[1]) / 2;
+    let factor = mid / kcal;
+    const sg = servingGrams(it);
+    if (sg && sg > 0 && sg < 200) {
+      const f2 = 100 / sg;
+      if (kcal * f2 >= rng[0] * 0.75 && kcal * f2 <= rng[1] * 1.25) factor = f2;
+    }
+    factor = Math.round(factor * 10) / 10;
+    if (factor >= 1.6 && factor <= 12) return { kind: 'per-serving', factor, range: rng };
+  }
+  return { kind: 'out-of-range', factor: null, range: rng };
+}
+function scaleNutrition(it, factor) {
+  const n = it.nutrition || {};
+  for (const k of ['kcal', 'protein', 'fat', 'satfat', 'carbs', 'sugars', 'fiber', 'salt'])
+    if (num(n[k]) != null) n[k] = Math.round(n[k] * factor * 100) / 100;
+  it.nutrition = n;
+  it.scaledBy = (it.scaledBy || 1) * factor;
+}
 function validGTIN(bc) {
   const s = String(bc || '').replace(/\D/g, '');
   if (![8, 12, 13, 14].includes(s.length)) return false;
@@ -1359,7 +1439,12 @@ async function enrichItem(it) {
     }
     if (it.barcode && !it.offDone) {
       const off = await lookupBarcode(it.barcode);
-      if (off) offToItem(it, off);
+      if (off) {
+        const probe = { name: off.name || it.name, category: off.category || it.category,
+                        quantity: off.quantity || it.quantity, nutrition: off.nutrition || {} };
+        if (plausibility(probe)) it.offSuspect = 1;
+        else offToItem(it, off);
+      }
       it.offDone = 1;
     }
   } catch (e) {}
@@ -1383,6 +1468,25 @@ async function enrichItem(it) {
       if (it.aiTries < 4) { await dbPutItem(clean(it)); return 'retry'; }
       it.aiDone = 1; it.aiFailed = 1;                     // surfaced in the UI instead
     }
+  }
+  if (it.name && !it.gapDone) {
+    const n0 = it.nutrition || {};
+    const gaps = ['sugars', 'satfat', 'salt', 'fiber'].filter(k => num(n0[k]) == null);
+    if (!gaps.length) it.gapDone = 1;
+    else {
+      try { await aiFillGaps(it, gaps); it.gapDone = 1; }
+      catch (e) {
+        it.gapTries = (it.gapTries || 0) + 1;
+        if (it.gapTries >= 3) it.gapDone = 1;
+        else { it.updatedAt = Date.now(); await dbPutItem(clean(it)); return 'retry'; }
+      }
+    }
+  }
+  if (it.name && !it.plausChecked) {
+    const p = plausibility(it);
+    it.plausChecked = 1;
+    if (p && p.kind === 'per-serving') { scaleNutrition(it, p.factor); it.autoScaled = p.factor; }
+    else if (p) it.dataWarn = 'Calories look off for this kind of product';
   }
   if (it.name && !it.suggestChecked && !it.suggestReady && !it.suggestWanted && !it.suggestNone) {
     it.suggestWanted = 1;                      // one automatic web-photo check per item, ever
@@ -2290,7 +2394,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, nutriRate, zoomImage, deriveStatus, setMyVerdict, mergeVerdicts, disagrees, myVerdict, othersVerdicts, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
+  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, nutriRate, plausibility, scaleNutrition, aiFillGaps, expectedKcalRange, zoomImage, deriveStatus, setMyVerdict, mergeVerdicts, disagrees, myVerdict, othersVerdicts, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
   identifyNoSave, runCheck, startCheck, resetCheck, renderCheckResult, checkToAdd, rateBoxHTML, nutriRowsHTML,
   qState: () => ({ qResult, qPhotos, qBusy }),
   setQ: (res, photos) => { qResult = res; if (photos) qPhotos = photos; },
