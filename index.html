@@ -127,6 +127,7 @@ section[hidden]{display:none}
 .rvname{font-size:21px;font-weight:750;letter-spacing:-.02em;margin-top:4px}
 
 .pendchip.dup{background:rgba(217,119,6,.9)}
+.pendchip.fail{background:rgba(220,38,38,.92)}
 .disagree{position:absolute;top:9px;right:9px;background:rgba(124,58,237,.92);color:#fff;
   font-size:10px;font-weight:800;padding:4px 8px;border-radius:999px;letter-spacing:.02em}
 .whorow{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 4px}
@@ -851,6 +852,7 @@ function renderList() {
       <span class="badge ${deriveStatus(it)}">${deriveStatus(it) === 'good' ? '✓ GOOD' : '✕ BAD'}</span>
       ${disagrees(it) ? '<span class="disagree" title="You two disagree">⚡ split</span>' : ''}
       ${it.pending ? '<span class="pendchip">🤖 identifying…</span>'
+        : (it.aiFailed && !it.name) ? '<span class="pendchip fail">⚠️ tap to retry</span>'
         : dupPartner(it) ? '<span class="pendchip dup">⚠️ duplicate</span>' : ''}
       ${it.nutriscore && NS_COLORS[it.nutriscore] ?
         `<span class="nscore" style="background:${NS_COLORS[it.nutriscore]}">${esc(it.nutriscore)}</span>` : ''}
@@ -925,6 +927,7 @@ async function openDetail(id) {
     ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
     <div class="dmeta">${it.barcode ? 'Barcode ' + esc(it.barcode) + ' · ' : ''}Added ${new Date(it.createdAt).toLocaleDateString()}</div>
     ${it.pending ? '<div class="hint">🤖 Identifying in the background — details fill in automatically.</div>' : ''}
+    ${(it.aiFailed && !it.name) ? `<div class="dupwarn">⚠️ Couldn\u2019t identify this one automatically${it.lastAiErr ? ' (' + esc(it.lastAiErr) + ')' : ''}. Tap <b>\u21bb Identify again</b>, or use Edit to type the details.</div>` : ''}
     ${(() => { const d = dupPartner(it); return d ? `<div class="dupwarn">⚠️ Same barcode as <b>${esc(d.name || 'another item')}</b> — likely the same product saved twice.<button class="btn sm danger" id="dDelDup" style="margin-top:8px;width:100%">Delete this duplicate</button></div>` : ''; })()}
     <div class="drow">
       <button class="btn ghost" id="dIdentify">↻ Identify again</button>
@@ -989,6 +992,7 @@ async function openDetail(id) {
     idBtn.disabled = true; idBtn.textContent = 'Identifying…';
     ['name','brand','category','quantity','barcode','nutriscore','nova','nutriSource'].forEach(k => delete it[k]);
     it.nutrition = {}; it.aiDone = 0; it.offDone = 0; it.pending = 1;
+    delete it.aiTries; delete it.aiFailed; delete it.lastAiErr;
     it.updatedAt = Date.now();
     await dbPutItem(clean(it));
     renderList();
@@ -1244,7 +1248,8 @@ async function callAnthropic(imgs) {
       'x-api-key': settings.aiKey, 'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true', 'content-type': 'application/json'
     },
-    body: JSON.stringify({ model: AI_MODEL, max_tokens: 1000, messages: [{ role: 'user', content }] })
+    body: JSON.stringify({ model: AI_MODEL, max_tokens: 1000, messages: [{ role: 'user', content }] }),
+    signal: withTimeout(60000)
   });
   if (!r.ok) {
     let msg = 'Anthropic request failed (' + r.status + ')';
@@ -1260,7 +1265,8 @@ async function callGemini(imgs, model) {
   const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': settings.aiKey },
-    body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: 2048, responseMimeType: 'application/json' } })
+    body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: 2048, responseMimeType: 'application/json' } }),
+    signal: withTimeout(60000)
   });
   if (!r.ok) {
     let msg = 'Gemini request failed (' + r.status + ')';
@@ -1272,7 +1278,7 @@ async function callGemini(imgs, model) {
   return extractJSON(gparts.map(p => p.text || '').join(''));
 }
 function isTransientErr(msg) {
-  return /(^|[^0-9])(429|500|502|503|504)([^0-9]|$)|overloaded|high demand|unavailable|resource.?exhausted|failed to fetch|network|timeout|unreadable AI reply/i.test(String(msg));
+  return /(^|[^0-9])(429|500|502|503|504)([^0-9]|$)|overloaded|high demand|unavailable|resource.?exhausted|failed to fetch|network|timeout|abort|no product name|unreadable AI reply/i.test(String(msg));
 }
 async function aiIdentify(imgs) {
   if (!/^(AIza|AQ[.])/.test(settings.aiKey)) return callAnthropic(imgs);
@@ -1317,6 +1323,16 @@ function aiToItem(it, d) {
   const bc = String(d.barcode || '').replace(/\D/g, '');
   if (!it.barcode && validGTIN(bc)) it.barcode = bc;   // reject AI-misread codes
 }
+async function shrinkB64(blob, maxW = 900, q = 0.6) {
+  if (window.__TEST_B64) return window.__TEST_B64;
+  const img = await fileToImage(blob);
+  return drawScaled(img, maxW).toDataURL('image/jpeg', q).split(',')[1];
+}
+function withTimeout(ms) {
+  const c = new AbortController();
+  setTimeout(() => c.abort(), ms);
+  return c.signal;
+}
 async function getItemPhotos(it) {
   const out = [];
   const meta = it.imgs || (it.hasImage ? { f: 1 } : {});
@@ -1351,11 +1367,21 @@ async function enrichItem(it) {
   const needsAI = !it.name || !it.nutrition || it.nutrition.kcal == null;
   if (settings.aiKey && needsAI && !it.aiDone) {
     try {
-      aiToItem(it, await aiIdentify(photos.map(p => p.b64)));
-      it.aiDone = 1;
+      const pick = [];                                   // front + label only, downscaled
+      for (const s of ['f', 'b']) { const p = photos.find(x => x.slot === s); if (p) pick.push(p); }
+      if (!pick.length) pick.push(photos[0]);
+      const imgs = [];
+      for (const p of pick) imgs.push(await shrinkB64(p.blob));
+      const d = await aiIdentify(imgs);
+      if (!d || !String(d.name || '').trim()) throw new Error('AI returned no product name');
+      aiToItem(it, d);
+      it.aiDone = 1; delete it.aiTries; delete it.aiFailed;
     } catch (e) {
-      if (isTransientErr(e.message)) { it.updatedAt = Date.now(); await dbPutItem(clean(it)); return 'retry'; }
-      it.aiDone = 1;
+      it.aiTries = (it.aiTries || 0) + 1;                 // never give up silently
+      it.lastAiErr = String(e.message || '').slice(0, 120);
+      it.updatedAt = Date.now();
+      if (it.aiTries < 4) { await dbPutItem(clean(it)); return 'retry'; }
+      it.aiDone = 1; it.aiFailed = 1;                     // surfaced in the UI instead
     }
   }
   if (it.name && !it.suggestChecked && !it.suggestReady && !it.suggestWanted && !it.suggestNone) {
@@ -2233,6 +2259,9 @@ async function init() {
   if (!settings.userName) {                       // fixed two-person app: this device is Cory
     settings.userName = 'Cory';
     await dbSetMeta('settings', { ...settings });
+  }
+  for (const it of items) {                       // rescue items the old code abandoned
+    if (!it.deletedAt && !it.name && it.aiDone && !it.aiFailed) { it.aiDone = 0; it.pending = 1; }
   }
   for (const it of items) {                       // credit pre-verdict items automatically
     if (it.status && !it.deletedAt && !verdictEntries(it).length) {
