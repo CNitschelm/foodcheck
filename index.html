@@ -762,6 +762,8 @@ function nutriRate(it) {
   if (derived.length) plus.push('Estimated (not on label): ' + derived.join(', '));
   if (missing.length) minus.push('Still unknown: ' + missing.join(' / '));
   if (it && it.autoScaled) plus.push('Converted per-serving to per 100 g (x' + it.autoScaled + ')');
+  if (it && it.labelOverrode && it.labelOverrode.length)
+    plus.push('Corrected from your label photo: ' + it.labelOverrode.join(', '));
   if (it && it.dataWarn) minus.push(it.dataWarn);
   if (implausible) minus.push('Label numbers do not add up - check the packet');
   return { stars, score: Math.round(score), idx: r1(idx),
@@ -1392,7 +1394,24 @@ function offToItem(it, off) {
     if (it.nutrition[k] == null && off.nutrition[k] != null) it.nutrition[k] = off.nutrition[k];
   it.nutriSource = 'label';
 }
-function aiToItem(it, d) {
+function aiToItem(it, d, preferLabel) {
+  if (preferLabel && d && d.nutrition && d.nutrition_source === 'label') {
+    it.nutrition = it.nutrition || {};
+    it.labelOverrode = it.labelOverrode || [];
+    for (const k of ['kcal','fat','satfat','carbs','sugars','fiber','protein','salt']) {
+      const v = num(d.nutrition[k]);
+      if (v == null) continue;
+      const cur = num(it.nutrition[k]);
+      const differs = cur == null ? false : Math.abs(v - cur) > Math.max(0.5, Math.abs(cur) * 0.25);
+      if (cur == null || differs) {
+        if (differs && !it.labelOverrode.includes(k)) it.labelOverrode.push(k);
+        it.nutrition[k] = v;
+      }
+    }
+    if (d.name) it.name = d.name;
+    if (d.brand) it.brand = d.brand;
+    it.nutriSource = 'label';
+  }
   fillEmpty(it, 'name', d.name); fillEmpty(it, 'brand', d.brand);
   fillEmpty(it, 'category', d.category); fillEmpty(it, 'quantity', d.quantity);
   it.nutrition = it.nutrition || {};
@@ -1449,7 +1468,8 @@ async function enrichItem(it) {
     }
   } catch (e) {}
   // 2) AI for whatever is still missing
-  const needsAI = !it.name || !it.nutrition || it.nutrition.kcal == null;
+  const hasLabelPhoto = !!((it.imgs || {}).b);
+  const needsAI = !it.name || !it.nutrition || it.nutrition.kcal == null || (hasLabelPhoto && !it.labelRead);
   if (settings.aiKey && needsAI && !it.aiDone) {
     try {
       const pick = [];                                   // front + label only, downscaled
@@ -1459,7 +1479,8 @@ async function enrichItem(it) {
       for (const p of pick) imgs.push(await shrinkB64(p.blob));
       const d = await aiIdentify(imgs);
       if (!d || !String(d.name || '').trim()) throw new Error('AI returned no product name');
-      aiToItem(it, d);
+      aiToItem(it, d, hasLabelPhoto);        // label photo wins over Open Food Facts
+      if (hasLabelPhoto) it.labelRead = 1;
       it.aiDone = 1; delete it.aiTries; delete it.aiFailed;
     } catch (e) {
       it.aiTries = (it.aiTries || 0) + 1;                 // never give up silently
