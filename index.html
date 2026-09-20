@@ -285,6 +285,24 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
   background:rgba(0,0,0,.55);padding:3px 8px;border-radius:999px}
 .chbtns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
 .chbtns #chUse{background:linear-gradient(135deg,var(--good),var(--good-2));color:#fff}
+#picker{position:fixed;inset:0;z-index:310;background:rgba(8,10,14,.6);display:flex;
+  align-items:flex-end;justify-content:center;padding:14px;
+  padding-bottom:calc(env(safe-area-inset-bottom) + 14px)}
+#picker[hidden]{display:none!important}
+.pkbox{width:100%;max-width:460px;background:var(--card);border-radius:20px;
+  padding:14px;box-shadow:var(--shadow);animation:pkup .18s ease-out}
+@keyframes pkup{from{transform:translateY(18px);opacity:.3}to{transform:none;opacity:1}}
+.pktitle{font-size:12px;font-weight:800;color:var(--muted);text-align:center;
+  margin:3px 0 11px;letter-spacing:.05em;text-transform:uppercase}
+.pkopt{display:flex;align-items:center;gap:13px;width:100%;text-align:left;
+  background:var(--bg);border:1px solid var(--line);border-radius:15px;
+  padding:13px 15px;margin-bottom:9px;color:var(--text)}
+.pkopt:active{transform:scale(.985)}
+.pkico{font-size:25px;line-height:1}
+.pkopt b{display:block;font-size:15px;font-weight:700}
+.pkopt i{display:block;font-size:12px;font-style:normal;color:var(--muted);margin-top:1px}
+.pkcancel{width:100%;background:transparent;border:none;color:var(--muted);
+  font-size:15px;font-weight:700;padding:11px}
 #imgZoom{position:fixed;inset:0;z-index:300;background:#000;display:flex;
   align-items:center;justify-content:center;padding:0}
 #imgZoom[hidden]{display:none!important}
@@ -361,10 +379,7 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
         <div class="photobtn" id="pbBtn"><span class="ico">📋</span><span class="lb">Back / label</span><span class="sub">nutrition</span></div>
         <div class="photobtn" id="pcBtn"><span class="ico">🏷️</span><span class="lb">Barcode</span><span class="sub">exact match</span></div>
       </div>
-      <input type="file" accept="image/*" id="pfInput" hidden>
-      <input type="file" accept="image/*" id="pbInput" hidden>
-      <input type="file" accept="image/*" id="pcInput" hidden>
-      <div class="hint">Tap a slot — camera or gallery. Name and nutrition fill themselves in automatically after you save.</div>
+      <div class="hint">Tap a slot — take a photo, or pick several from your gallery at once. Name and nutrition fill themselves in automatically after you save.</div>
     </div>
 
     <div class="formcard" id="detailsCard" hidden>
@@ -409,8 +424,6 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
         <div class="photobtn" id="qfBtn"><span class="ico">📦</span><span class="lb">Front</span><span class="sub">package</span></div>
         <div class="photobtn" id="qcBtn"><span class="ico">🏷️</span><span class="lb">Barcode / label</span><span class="sub">most accurate</span></div>
       </div>
-      <input type="file" accept="image/*" id="qfInput" hidden>
-      <input type="file" accept="image/*" id="qcInput" hidden>
       <div class="field" style="margin-top:12px"><label>Or type the barcode number</label>
         <input id="qBarcode" inputmode="numeric" autocomplete="off" placeholder="8850001234567"></div>
       <button class="btn" id="qRunBtn" style="width:100%">Check it</button>
@@ -516,6 +529,17 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
     <button class="btn" id="chUse">Use suggested</button>
   </div>
   <button class="btn sm ghost" id="chLater" style="margin-top:10px;width:100%;opacity:.7">Decide later</button>
+</div></div>
+
+<!-- one camera input (forces the camera on Android/iOS), one gallery input (multi-select) -->
+<input type="file" accept="image/*" capture="environment" id="camIn" hidden>
+<input type="file" accept="image/*" multiple id="galIn" hidden>
+
+<div id="picker" hidden><div class="pkbox">
+  <div class="pktitle" id="pkTitle">Add a photo</div>
+  <button class="pkopt" id="pkCam"><span class="pkico">📷</span><span><b>Take a photo</b><i>Opens the camera</i></span></button>
+  <button class="pkopt" id="pkGal"><span class="pkico">🖼️</span><span><b>Choose from gallery</b><i>Pick one or several</i></span></button>
+  <button class="pkcancel" id="pkCancel">Cancel</button>
 </div></div>
 
 <div id="imgZoom" hidden><img id="zoomImg" alt=""></div>
@@ -1109,7 +1133,6 @@ async function lookupBarcode(code) {
 
 /* ---------------- add / edit form (instant save) ---------------- */
 const SLOTS = ['f', 'b', 'c'];
-const SLOT_INPUT = { f: '#pfInput', b: '#pbInput', c: '#pcInput' };
 const SLOT_BTN = { f: '#pfBtn', b: '#pbBtn', c: '#pcBtn' };
 
 function resetForm() {
@@ -1137,8 +1160,46 @@ function paintPreview(btn, dataURL, onClear) {
 function setSlotPreview(slot, dataURL) {
   paintPreview($(SLOT_BTN[slot]), dataURL, () => { draft.photos[slot] = null; setSlotPreview(slot, null); });
 }
-async function onSlotFile(slot, file) {
-  toast('Processing photo…', 900);
+/* ---- photo picker: camera vs gallery, multi-file aware -------------------
+   Android 13+ sends a bare accept="image/*" input to the system Photo Picker,
+   which has no camera option, so the camera needs its own capture input.     */
+let pickTarget = null;                                   // {view:'add'|'check', slot}
+const SLOT_TITLE   = { f: 'Front of package', b: 'Back / nutrition label', c: 'Barcode' };
+const Q_SLOT_TITLE = { f: 'Front of package', c: 'Barcode / label' };
+
+function openPicker(view, slot) {
+  pickTarget = { view, slot };
+  const titles = view === 'add' ? SLOT_TITLE : Q_SLOT_TITLE;
+  $('#pkTitle').textContent = titles[slot] || 'Add a photo';
+  $('#picker').hidden = false;
+}
+function closePicker() { $('#picker').hidden = true; }
+function runPicker(sel) { closePicker(); $(sel).click(); }
+
+/* first file goes to the slot that was tapped, the rest spill into empty slots */
+function photoTargets(n) {
+  if (!pickTarget) return [];
+  const { view, slot } = pickTarget;
+  const order = view === 'add' ? SLOTS : Q_SLOTS;
+  const filled = view === 'add' ? draft.photos : qPhotos;
+  return [slot, ...order.filter(s => s !== slot && !filled[s])].slice(0, n);
+}
+async function acceptPhotos(files) {
+  const t = pickTarget;
+  if (!t) return;
+  const slots = photoTargets(files.length);
+  if (!slots.length) return;
+  toast(files.length > 1 ? `Processing ${slots.length} photos…` : 'Processing photo…', 1400);
+  for (let i = 0; i < slots.length; i++) {
+    if (t.view === 'add') await onSlotFile(slots[i], files[i], true);
+    else                  await onCheckFile(slots[i], files[i], true);
+  }
+  const extra = files.length - slots.length;
+  if (extra > 0) toast(`Added ${slots.length}. ${extra} skipped — no empty slot left`, 2800);
+}
+
+async function onSlotFile(slot, file, quiet) {
+  if (!quiet) toast('Processing photo…', 900);
   try {
     const { fullBlob, thumb } = await compressPhoto(file);
     draft.photos[slot] = { fullBlob, thumb };
@@ -1550,7 +1611,6 @@ let qResult = null;
 let qBusy = false;
 const Q_SLOTS = ['f', 'c'];
 const Q_SLOT_BTN = { f: '#qfBtn', c: '#qcBtn' };
-const Q_SLOT_INPUT = { f: '#qfInput', c: '#qcInput' };
 const Q_VERDICT = {
   5: { word: 'Great choice', sub: 'Strong for your goals', cls: 'good' },
   4: { word: 'Good choice',  sub: 'Works for your goals',  cls: 'good' },
@@ -1572,8 +1632,8 @@ function clearQSlot(slot) {
   qPhotos[slot] = null;
   paintPreview($(Q_SLOT_BTN[slot]), null, () => {});
 }
-async function onCheckFile(slot, file) {
-  toast('Processing photo…', 900);
+async function onCheckFile(slot, file, quiet) {
+  if (!quiet) toast('Processing photo…', 900);
   try {
     const { fullBlob, thumb } = await compressPhoto(file);
     qPhotos[slot] = { fullBlob, thumb };
@@ -2254,7 +2314,10 @@ function bindEvents() {
   $('#overlay').onclick = closeSheet;
   $('#sheetClose').onclick = closeSheet;
   document.querySelector('#sheet .grab').addEventListener('click', closeSheet);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!$('#picker').hidden) closePicker(); else closeSheet();
+  });
   (() => {
     const sheet = $('#sheet');
     let startY = null, delta = 0, dragging = false;
@@ -2298,18 +2361,17 @@ function bindEvents() {
     renderList();
   });
 
-  for (const s of SLOTS) {
-    $(SLOT_BTN[s]).addEventListener('click', () => $(SLOT_INPUT[s]).click());
-    $(SLOT_INPUT[s]).addEventListener('change', e => {
-      const f = e.target.files[0]; e.target.value = '';
-      if (f) onSlotFile(s, f);
-    });
-  }
-  for (const s of Q_SLOTS) {
-    $(Q_SLOT_BTN[s]).addEventListener('click', () => $(Q_SLOT_INPUT[s]).click());
-    $(Q_SLOT_INPUT[s]).addEventListener('change', e => {
-      const f = e.target.files[0]; e.target.value = '';
-      if (f) onCheckFile(s, f);
+  for (const s of SLOTS)   $(SLOT_BTN[s]).addEventListener('click', () => openPicker('add', s));
+  for (const s of Q_SLOTS) $(Q_SLOT_BTN[s]).addEventListener('click', () => openPicker('check', s));
+  $('#pkCam').onclick    = () => runPicker('#camIn');
+  $('#pkGal').onclick    = () => runPicker('#galIn');
+  $('#pkCancel').onclick = closePicker;
+  $('#picker').addEventListener('click', e => { if (e.target.id === 'picker') closePicker(); });
+  for (const sel of ['#camIn', '#galIn']) {
+    $(sel).addEventListener('change', e => {
+      const files = Array.from(e.target.files || []);
+      e.target.value = '';
+      if (files.length) acceptPhotos(files);
     });
   }
   $('#qRunBtn').onclick = runCheck;
@@ -2433,11 +2495,12 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches, onSlotFile, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, nutriRate, fmtNut, tidyNutrition, plausibility, scaleNutrition, aiFillGaps, expectedKcalRange, zoomImage, deriveStatus, setMyVerdict, mergeVerdicts, disagrees, myVerdict, othersVerdicts, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
+  mergeItems, esc, uid, num, matches, onSlotFile, onCheckFile, openPicker, closePicker, photoTargets, acceptPhotos, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, nutriRate, fmtNut, tidyNutrition, plausibility, scaleNutrition, aiFillGaps, expectedKcalRange, zoomImage, deriveStatus, setMyVerdict, mergeVerdicts, disagrees, myVerdict, othersVerdicts, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
   identifyNoSave, runCheck, startCheck, resetCheck, renderCheckResult, checkToAdd, rateBoxHTML, nutriRowsHTML,
   qState: () => ({ qResult, qPhotos, qBusy }),
   setQ: (res, photos) => { qResult = res; if (photos) qPhotos = photos; },
   state: () => ({ items, filter }),
+  draftState: () => draft, setDraftPhotos: p => { draft = { status: null, photos: p }; },
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
   renderList
