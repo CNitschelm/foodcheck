@@ -101,6 +101,19 @@ section[hidden]{display:none}
 .lockbox p{margin:0;color:var(--muted);font-size:14px;line-height:1.55}
 .lockbox input{padding:13px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-size:16px;text-align:center}
 .lockerr{color:var(--bad);font-size:13px;min-height:17px;font-weight:500}
+.lkstep{display:flex;flex-direction:column;gap:11px}
+.lkstep[hidden]{display:none!important}
+.lkbig{display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:var(--bg);
+  border:1px solid var(--line);border-radius:15px;padding:14px 15px;color:var(--text)}
+.lkbig:active{transform:scale(.985)}
+.lkico{font-size:26px;line-height:1}
+.lkbig b{display:block;font-size:15.5px;font-weight:700}
+.lkbig i{display:block;font-style:normal;font-size:12.5px;color:var(--muted);margin-top:2px}
+.joinsteps{text-align:left;margin:0;padding-left:21px;display:flex;flex-direction:column;gap:7px;
+  font-size:13.5px;line-height:1.45;color:var(--text)}
+.joinsteps li::marker{font-weight:800;color:var(--good)}
+a.lklink{display:block;text-decoration:none;text-align:center}
+#invKey{font-family:ui-monospace,Menlo,monospace;font-size:14px}
 
 /* ---- form cards ---- */
 .formcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
@@ -332,11 +345,36 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
 <div id="lock" hidden><div class="lockbox">
   <div style="font-size:42px">🛒</div>
   <h2>FoodCheck</h2>
-  <p id="lockmsg">Enter your password to set up this device.</p>
-  <input id="lockpw" type="password" autocomplete="current-password" placeholder="Password">
-  <button class="btn" id="lockbtn">Unlock</button>
-  <div class="lockerr" id="lockerr"></div>
-  <button class="btn ghost sm" id="lockskip">Skip — set up manually</button>
+
+  <div class="lkstep" id="lkWho">
+    <p>How are you signing in on this phone?</p>
+    <button class="lkbig" id="lkInvBtn"><span class="lkico">✉️</span><span><b>I was invited</b><i>Sign in with your own GitHub key</i></span></button>
+    <button class="lkbig" id="lkPwBtn"><span class="lkico">🔑</span><span><b>I have the password</b><i>For the owner's own devices</i></span></button>
+  </div>
+
+  <div class="lkstep" id="lkPw" hidden>
+    <p id="lockmsg">Enter your password to set up this device.</p>
+    <input id="lockpw" type="password" autocomplete="current-password" placeholder="Password">
+    <button class="btn" id="lockbtn">Unlock</button>
+    <div class="lockerr" id="lockerr"></div>
+    <button class="btn ghost sm" id="lockskip">Skip — set up manually</button>
+    <button class="btn ghost sm" id="lkPwBack">← Back</button>
+  </div>
+
+  <div class="lkstep" id="lkInv" hidden>
+    <p id="invMsg">You need your own GitHub key. It takes about a minute:</p>
+    <ol class="joinsteps">
+      <li>Tap <b>Make my key</b> and sign in to GitHub.</li>
+      <li>Set <b>Expiration</b> to <b>No expiration</b>. Everything else is already filled in.</li>
+      <li>Scroll down, tap the green <b>Generate token</b>, then tap the copy icon next to the new key.</li>
+      <li>Come back here and tap <b>Paste key &amp; connect</b>.</li>
+    </ol>
+    <a class="btn ghost lklink" id="invMake" href="https://github.com/settings/tokens/new?scopes=repo&amp;description=FoodCheck">Make my key ↗</a>
+    <input id="invKey" type="password" placeholder="Your key (starts with ghp_)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <button class="btn" id="invGo">📋 Paste key &amp; connect</button>
+    <div class="lockerr" id="invErr"></div>
+    <button class="btn ghost sm" id="lkInvBack">← Back</button>
+  </div>
 </div></div>
 
 <header>
@@ -439,7 +477,7 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
       <div class="stack">
         <div class="hint" id="acctStatus"></div>
         <div style="display:flex;gap:8px">
-          <button class="btn sm" id="loginBtn">Log in with password</button>
+          <button class="btn sm" id="loginBtn">Log in</button>
           <button class="btn sm ghost" id="logoutBtn">Log out of this device</button>
         </div>
       </div>
@@ -459,8 +497,8 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
       <div class="stack">
         <div class="field"><label>Data repo (owner/name — private repo recommended)</label>
           <input id="sRepo" placeholder="youruser/foodcheck-data" autocapitalize="off" autocomplete="off"></div>
-        <div class="field"><label>Fine-grained token (Contents: read &amp; write on that repo)</label>
-          <input id="sToken" type="password" placeholder="github_pat_…" autocomplete="off"></div>
+        <div class="field"><label>GitHub token (owner: fine-grained, Contents read &amp; write · invited people: classic ghp_ with repo scope)</label>
+          <input id="sToken" type="password" placeholder="github_pat_… or ghp_…" autocomplete="off"></div>
         <div class="field"><label>Branch</label><input id="sBranch" value="main" autocapitalize="off"></div>
         <div style="display:flex;gap:8px">
           <button class="btn sm" id="sSave">Save &amp; test</button>
@@ -671,6 +709,7 @@ let filter = 'all', sortMode = 'new', searchQ = '', nutMin = 0;
 let editingId = null;
 let draft = null;
 let syncing = false;
+let syncRetries = 0;
 
 const live = () => items.filter(i => !i.deletedAt);
 
@@ -1975,6 +2014,7 @@ async function openChooser(id) {
 function closeChooser() { $('#imgChooser').hidden = true; chooserId = null; document.body.style.overflow = ''; }
 function maybeShowChooser() {
   if (!$('#imgChooser').hidden || !$('#lock').hidden) return;
+  if (settings.ghLogin) return;                      // photo clean-up is the owner's chore
   const it = live().find(i => i.suggestReady && !chooserSnoozed.has(i.id));
   if (it) openChooser(it.id);
 }
@@ -2064,10 +2104,14 @@ async function exportBundle() {
 }
 async function tryUnlock() {
   const pw = $('#lockpw').value; if (!pw) return;
+  if (!lockBundleText) { $('#lockerr').textContent = 'Password sign-in is not available right now — check your internet and reopen the app.'; return; }
   $('#lockerr').textContent = ''; $('#lockbtn').disabled = true; $('#lockbtn').textContent = 'Unlocking…';
   try {
     const cfg = await decryptBundle(pw, lockBundleText);
     settings = Object.assign(settings, cfg);
+    if (!settings.userName || settings.ghLogin) settings.userName = 'Cory';   // the password bundle is the owner's
+    settings.ghLogin = '';
+    try { localStorage.removeItem('fcLockStep'); } catch (e) {}
     await dbSetMeta('settings', { ...settings });
     $('#lock').hidden = true;
     toast('Device set up ✓ — syncing…');
@@ -2081,17 +2125,197 @@ async function tryUnlock() {
 }
 async function maybeShowLock(force) {
   if (!force && (ghConfigured() || settings.aiKey)) return;
-  try {
+  lockBundleText = null;
+  try {                                   // the password bundle is optional: invited people don't need it
     const r = await fetch(CONFIG_PATH + '?_=' + Date.now(), { cache: 'no-store' });
-    if (!r.ok) return;
-    const text = await r.text();
-    let j = null;
-    try { j = JSON.parse(text); } catch (e) { if (force) toast('No password login published yet'); return; }
-    if (!j || j.v !== 1 || j.kdf !== 'PBKDF2-SHA256' || !j.salt || !j.iv || !j.data) { if (force) toast('No password login published yet'); return; }
-    lockBundleText = text;
-    $('#lock').hidden = false;
+    if (r.ok) {
+      const text = await r.text();
+      const j = JSON.parse(text);
+      if (j && j.v === 1 && j.kdf === 'PBKDF2-SHA256' && j.salt && j.iv && j.data) lockBundleText = text;
+    }
+  } catch (e) {}
+  let step = 'who';
+  try { if (localStorage.getItem('fcLockStep') === 'inv') step = 'inv'; } catch (e) {}
+  showLockStep(step);
+  $('#lock').hidden = false;
+}
+function showLockStep(step, msg) {
+  $('#lkWho').hidden = step !== 'who';
+  $('#lkPw').hidden = step !== 'pw';
+  $('#lkInv').hidden = step !== 'inv';
+  try { if (step === 'inv') localStorage.setItem('fcLockStep', 'inv'); else localStorage.removeItem('fcLockStep'); } catch (e) {}
+  if (step === 'pw') {
+    $('#lockerr').textContent = lockBundleText ? '' : 'Password sign-in is not available right now (offline?).';
     setTimeout(() => { const el = $('#lockpw'); if (el) el.focus(); }, 60);
-  } catch (e) { if (force) toast('Could not check for login config (offline?)'); }
+  }
+  if (step === 'inv') {
+    $('#invErr').textContent = '';
+    $('#invMsg').textContent = msg || 'You need your own GitHub key. It takes about a minute:';
+  }
+}
+
+/* ---- invited person joins with their own classic GitHub key ----------------
+   Fine-grained keys cannot open a repo owned by another personal account when
+   you're only a collaborator, so invited people need a classic ghp_ key with
+   the repo scope. Their pending invitation is accepted automatically.        */
+const DATA_REPO = 'CNitschelm/foodcheck-data';
+function ghAs(token, path, opts) {
+  const o = opts || {};
+  return fetch(GH + path, {
+    method: o.method || 'GET', cache: 'no-store',
+    headers: Object.assign({ 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28' }, o.headers || {})
+  });
+}
+const cleanKey = v => String(v || '').replace(/\s+/g, '');
+async function joinWithKey(raw) {
+  const token = cleanKey(raw);
+  if (!token) return 'Paste your key first — it starts with ghp_.';
+  if (/^github_pat_/.test(token)) return 'That is a “fine-grained” key, which can’t open a shared list. Tap Make my key — that page makes the right kind (it starts with ghp_).';
+  if (!/^ghp_[A-Za-z0-9]{30,}$/.test(token)) return 'That doesn’t look like a GitHub key. It should start with ghp_. Copy it again and retry.';
+  let r;
+  try { r = await ghAs(token, '/user'); } catch (e) { return 'No internet connection. Try again when you’re online.'; }
+  if (r.status === 401) return 'GitHub didn’t accept that key (it may be mistyped, expired or deleted). Tap Make my key to make a new one.';
+  if (!r.ok) return 'GitHub had a problem (' + r.status + '). Try again in a minute.';
+  const me = await r.json();
+  const sc = r.headers.get('x-oauth-scopes');
+  if (sc !== null && !sc.split(',').map(x => x.trim()).includes('repo'))
+    return 'That key is missing the “repo” permission. Tap Make my key — that page ticks it for you.';
+  let repoRes = await ghAs(token, '/repos/' + DATA_REPO);
+  if (repoRes.status === 404) {                         // not a collaborator yet: accept the invitation
+    try {
+      const inv = await ghAs(token, '/user/repository_invitations');
+      const list = inv.ok ? await inv.json() : [];
+      const mine = (Array.isArray(list) ? list : []).find(x => x && x.repository &&
+        String(x.repository.full_name || '').toLowerCase() === DATA_REPO.toLowerCase());
+      if (mine) {
+        const acc = await ghAs(token, '/user/repository_invitations/' + mine.id, { method: 'PATCH' });
+        if (acc.ok) repoRes = await ghAs(token, '/repos/' + DATA_REPO);
+      }
+    } catch (e) {}
+  }
+  if (repoRes.status === 404) return 'The GitHub account “' + me.login + '” has no invitation yet (or it expired). Ask for a new invitation, then tap the button again.';
+  if (!repoRes.ok) return 'GitHub had a problem (' + repoRes.status + '). Try again in a minute.';
+  const repo = await repoRes.json();
+  if (repo.permissions && repo.permissions.push === false) return 'You can see the list but not add to it. Ask for “Write” access, then tap the button again.';
+  let name = me.login;                                  // display name comes from the PRIVATE repo
+  try {
+    const pr = await ghAs(token, '/repos/' + DATA_REPO + '/contents/data/people.json',
+      { headers: { Accept: 'application/vnd.github.raw+json' } });
+    if (pr.ok) {
+      const map = JSON.parse(await pr.text());
+      if (map && typeof map[me.login] === 'string' && map[me.login].trim()) name = map[me.login].trim().slice(0, 24);
+    }
+  } catch (e) {}
+  settings.repo = DATA_REPO; settings.token = token; settings.branch = repo.default_branch || 'main';
+  settings.ghLogin = me.login; settings.userName = name;
+  await dbSetMeta('settings', { ...settings });
+  return null;
+}
+async function onInvGo() {
+  const btn = $('#invGo'), err = $('#invErr');
+  err.textContent = '';
+  let val = $('#invKey').value;
+  if (!cleanKey(val)) {
+    try { val = await navigator.clipboard.readText(); $('#invKey').value = cleanKey(val); }
+    catch (e) { err.textContent = 'Tap and hold the box above, choose Paste, then tap the button again.'; $('#invKey').focus(); return; }
+  }
+  btn.disabled = true; btn.textContent = 'Connecting…';
+  try {
+    const problem = await joinWithKey(val);
+    if (problem) { err.textContent = problem; return; }
+    try { localStorage.removeItem('fcLockStep'); } catch (e) {}
+    $('#invKey').value = '';
+    $('#lock').hidden = true;
+    toast('Connected ✓ — hi ' + settings.userName + '! Loading the list…', 3500);
+    renderList();
+    await syncNow(true);
+  } finally {
+    btn.disabled = false; btn.textContent = '📋 Paste key & connect';
+  }
+}
+
+/* ---- AI key hand-off, owner -> invited device, end-to-end encrypted ---------
+   The invited device makes an RSA key pair and publishes only the public half
+   to the PRIVATE data repo. An owner device (which has the AI key) encrypts the
+   key to that public half. Nothing readable ever lands in git or in email.     */
+async function sha256hex(str) {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function ghGetJson(path) {
+  const r = await fetch(`${GH}/repos/${settings.repo}/contents/${path}?ref=${encodeURIComponent(settings.branch)}&_=${Date.now()}`,
+    { headers: ghHeaders(), cache: 'no-store' });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error('GitHub ' + r.status);
+  const j = await r.json();
+  const txt = new TextDecoder().decode(bytesFromB64(String(j.content || '').replace(/\s+/g, '')));
+  return { json: JSON.parse(txt), sha: j.sha };
+}
+const RSA = { name: 'RSA-OAEP', hash: 'SHA-256' };
+async function ensureDeviceKey() {
+  let dk = await dbGetMeta('devKey');
+  if (dk && dk.pubJwk && dk.privJwk && dk.fp) return dk;
+  const kp = await crypto.subtle.generateKey(Object.assign({ modulusLength: 2048,
+    publicExponent: new Uint8Array([1, 0, 1]) }, RSA), true, ['encrypt', 'decrypt']);
+  const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
+  const privJwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
+  dk = { pubJwk, privJwk, fp: (await sha256hex(pubJwk.n)).slice(0, 16) };
+  await dbSetMeta('devKey', dk);
+  return dk;
+}
+async function keyHandoffReceive() {
+  const base = 'data/keys/' + settings.ghLogin;
+  const dk = await ensureDeviceKey();
+  const pub = await ghGetJson(base + '.pub.json');
+  if (!pub || !pub.json || pub.json.fp !== dk.fp) {
+    const body = { v: 1, login: settings.ghLogin, fp: dk.fp, jwk: { kty: dk.pubJwk.kty, n: dk.pubJwk.n, e: dk.pubJwk.e, alg: dk.pubJwk.alg }, t: Date.now() };
+    await ghPut(base + '.pub.json', b64EncodeUnicode(JSON.stringify(body)), pub && pub.sha, 'FoodCheck: device key');
+    return false;
+  }
+  const share = await ghGetJson(base + '.share.json');
+  if (!share || !share.json || share.json.pfp !== dk.fp || !share.json.ct) return false;
+  if (settings.aiKey && settings.aiKfp === share.json.kfp) return false;      // already current
+  const priv = await crypto.subtle.importKey('jwk', dk.privJwk, RSA, false, ['decrypt']);
+  const pt = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, priv, bytesFromB64(share.json.ct));
+  const had = !!settings.aiKey;
+  settings.aiKey = new TextDecoder().decode(pt);
+  settings.aiKfp = share.json.kfp;
+  await dbSetMeta('settings', { ...settings });
+  if (!had) toast('Photo reading is on ✓ — new items fill themselves in', 3500);
+  setTimeout(processQueue, 300);
+  return true;
+}
+async function keyHandoffGive() {
+  const files = await ghListDir('data/keys');
+  const pubs = files.filter(f => /\.pub\.json$/.test(f.name));
+  if (!pubs.length) return 0;
+  const kfp = (await sha256hex(settings.aiKey)).slice(0, 12);
+  let n = 0;
+  for (const f of pubs) {
+    const login = f.name.replace(/\.pub\.json$/, '');
+    const pub = await ghGetJson('data/keys/' + f.name);
+    if (!pub || !pub.json || !pub.json.jwk || !pub.json.fp) continue;
+    const shareName = login + '.share.json';
+    const cur = files.some(x => x.name === shareName) ? await ghGetJson('data/keys/' + shareName) : null;
+    if (cur && cur.json && cur.json.pfp === pub.json.fp && cur.json.kfp === kfp) continue;
+    const pk = await crypto.subtle.importKey('jwk', pub.json.jwk, RSA, false, ['encrypt']);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, pk, new TextEncoder().encode(settings.aiKey)));
+    const body = { v: 1, pfp: pub.json.fp, kfp, ct: b64FromBytes(ct), t: Date.now() };
+    await ghPut('data/keys/' + shareName, b64EncodeUnicode(JSON.stringify(body)), cur && cur.sha, 'FoodCheck: share AI key');
+    n++;
+  }
+  return n;
+}
+let lastKeyCheck = 0;
+async function keyHandoff(force) {
+  if (!ghConfigured() || !navigator.onLine) return;
+  if (!force && Date.now() - lastKeyCheck < 60000) return;
+  lastKeyCheck = Date.now();
+  try {
+    if (settings.ghLogin) await keyHandoffReceive();            // invited device: receive
+    else if (settings.aiKey) await keyHandoffGive();            // owner device: give
+  } catch (e) { /* retried on the next sync */ }
 }
 
 /* ---------------- GitHub sync ---------------- */
@@ -2193,6 +2417,8 @@ async function syncNow(auto) {
       await dbSetMeta('imgDirty', [...imgDirty]);
     }
     await dbSetMeta('lastSync', Date.now());
+    syncRetries = 0;
+    keyHandoff();
     setSyncUI('ok', 'Synced');
     if (!auto) toast('Synced ✓');
     renderList();
@@ -2200,6 +2426,13 @@ async function syncNow(auto) {
   } catch (e) {
     setSyncUI('err', 'Sync error');
     if (!auto) toast('Sync failed: ' + e.message, 4000);
+    if (settings.ghLogin && /\b401\b/.test(e.message)) {      // invited person's key expired/deleted
+      maybeShowLock(true).then(() => showLockStep('inv',
+        'Your GitHub key stopped working (it may have expired). Make a new one below — your list is safe.'));
+    } else if (/PUT (409|422)/.test(e.message) && syncRetries < 2) {   // someone else pushed first
+      syncRetries++;
+      setTimeout(() => syncNow(true), 1500 + Math.random() * 1500);
+    }
   } finally {
     syncing = false;
   }
@@ -2210,8 +2443,9 @@ function renderSettings() {
   $('#adminZone').hidden = (location.hash !== '#admin');
   const loggedIn = !!(ghConfigured() || settings.aiKey);
   $('#acctStatus').textContent = loggedIn
-    ? '\u2713 Logged in \u2014 your items and photos back up automatically.'
-    : 'Not logged in on this device. Enter your password to connect.';
+    ? '\u2713 Logged in' + (settings.userName ? ' as ' + settings.userName : '') + ' \u2014 your items and photos back up automatically.'
+      + (settings.ghLogin && !settings.aiKey ? ' Photo reading switches on by itself shortly.' : '')
+    : 'Not logged in on this device.';
   $('#loginBtn').hidden = loggedIn;
   $('#logoutBtn').hidden = !loggedIn;
   $('#sUserName').value = settings.userName || '';
@@ -2393,6 +2627,12 @@ function bindEvents() {
   $('#lockbtn').onclick = tryUnlock;
   $('#lockpw').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
   $('#lockskip').onclick = () => { $('#lock').hidden = true; };
+  $('#lkPwBtn').onclick = () => showLockStep('pw');
+  $('#lkInvBtn').onclick = () => showLockStep('inv');
+  $('#lkPwBack').onclick = () => showLockStep('who');
+  $('#lkInvBack').onclick = () => showLockStep('who');
+  $('#invGo').onclick = onInvGo;
+  $('#invKey').addEventListener('keydown', e => { if (e.key === 'Enter') onInvGo(); });
   $('#loginBtn').onclick = () => {
     if (ghConfigured() || settings.aiKey) { toast('Already logged in on this device'); return; }
     maybeShowLock(true);
@@ -2461,14 +2701,14 @@ async function init() {
   items = (await dbAllItems()) || [];
   const st = await dbGetMeta('settings'); if (st) settings = Object.assign(settings, st);
   imgDirty = new Set((await dbGetMeta('imgDirty')) || []);
-  if (!settings.userName) {                       // fixed two-person app: this device is Cory
-    settings.userName = 'Cory';
+  if (!settings.userName && (ghConfigured() || settings.aiKey) && !settings.ghLogin) {
+    settings.userName = 'Cory';                   // devices set up before invites existed are the owner's
     await dbSetMeta('settings', { ...settings });
   }
   for (const it of items) {                       // rescue items the old code abandoned
     if (!it.deletedAt && !it.name && it.aiDone && !it.aiFailed) { it.aiDone = 0; it.pending = 1; }
   }
-  for (const it of items) {                       // credit pre-verdict items automatically
+  if (settings.userName && !settings.ghLogin) for (const it of items) {   // credit pre-verdict items to the owner
     if (it.status && !it.deletedAt && !verdictEntries(it).length) {
       it.verdicts = { [settings.userName]: { v: it.status, t: it.updatedAt || Date.now() } };
     }
@@ -2483,7 +2723,8 @@ async function init() {
   maybeShowLock();
   processQueue();
   setTimeout(maybeShowChooser, 1500);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { processQueue(); setTimeout(maybeShowChooser, 800); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { processQueue(); keyHandoff(); setTimeout(maybeShowChooser, 800); } });
+  setInterval(() => { if (!document.hidden && settings.ghLogin && !settings.aiKey) keyHandoff(); }, 120000);
   if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => {
     if (e.data && e.data.type === 'process-queue') processQueue();
   });
@@ -2501,6 +2742,9 @@ window.__FC = {
   setQ: (res, photos) => { qResult = res; if (photos) qPhotos = photos; },
   state: () => ({ items, filter }),
   draftState: () => draft, setDraftPhotos: p => { draft = { status: null, photos: p }; },
+  joinWithKey, onInvGo, showLockStep, maybeShowLock, keyHandoff, keyHandoffGive, keyHandoffReceive, ensureDeviceKey, syncNow,
+  settingsState: () => settings, setSettings: o => { settings = Object.assign(settings, o); },
+  resetKeyTimer: () => { lastKeyCheck = 0; },
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
   renderList
