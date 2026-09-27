@@ -316,6 +316,32 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
 .pkopt i{display:block;font-size:12px;font-style:normal;color:var(--muted);margin-top:1px}
 .pkcancel{width:100%;background:transparent;border:none;color:var(--muted);
   font-size:15px;font-weight:700;padding:14px}
+#cam{position:fixed;inset:0;z-index:330;background:#000;overflow:hidden}
+#cam[hidden]{display:none!important}
+#camVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+.camflash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .28s}
+.camflash.on{opacity:.8;transition:none}
+.camtop{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:10px;
+  padding:calc(env(safe-area-inset-top) + 12px) 14px 26px;background:linear-gradient(rgba(0,0,0,.6),transparent)}
+.camtop .sp{width:46px}
+.camlabel{flex:1;text-align:center;color:#fff;line-height:1.25;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+.camlabel span{display:block;font-size:11.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;opacity:.85}
+.camlabel b{font-size:18px}
+.camicon{width:46px;height:46px;border-radius:50%;border:none;background:rgba(0,0,0,.45);color:#fff;font-size:20px}
+.camicon.on{background:#fbbf24}
+.cambottom{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+  padding:26px 18px calc(env(safe-area-inset-bottom) + 24px);background:linear-gradient(transparent,rgba(0,0,0,.65))}
+.camthumbs{display:flex;gap:6px}
+.camthumbs img{width:42px;height:42px;object-fit:cover;border-radius:9px;border:2px solid #fff}
+.camshutter{width:78px;height:78px;border-radius:50%;border:5px solid #fff;background:rgba(255,255,255,.3)}
+.camshutter:active{transform:scale(.92);background:#fff}
+.camshutter:disabled{opacity:.45}
+.camdone{justify-self:end;border:none;border-radius:999px;padding:12px 19px;background:rgba(255,255,255,.93);
+  color:#111;font-weight:800;font-size:15px}
+.camerr{position:absolute;left:18px;right:18px;top:38%;background:rgba(20,22,28,.94);color:#fff;border-radius:18px;
+  padding:20px;text-align:center;display:flex;flex-direction:column;gap:14px;font-size:15px;line-height:1.45}
+.camerr[hidden]{display:none!important}
+.camerr .camdone{justify-self:auto;align-self:center}
 #imgZoom{position:fixed;inset:0;z-index:300;background:#000;display:flex;
   align-items:center;justify-content:center;padding:0}
 #imgZoom[hidden]{display:none!important}
@@ -329,7 +355,7 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
   background:var(--text);color:var(--bg);
   padding:12px 18px;border-radius:14px;font-size:14px;font-weight:600;opacity:0;
   transition:opacity .2s ease, transform .24s cubic-bezier(.2,.9,.3,1.2);
-  z-index:200;max-width:92vw;text-align:center;pointer-events:none;
+  z-index:400;max-width:92vw;text-align:center;pointer-events:none;
   box-shadow:var(--shadow-lg);line-height:1.35}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
 @keyframes flashName{0%{background:color-mix(in srgb, var(--good) 32%, transparent)}
@@ -579,6 +605,27 @@ nav button.addbig .nico{background:linear-gradient(135deg,var(--good),var(--good
   <button class="pkopt" id="pkGal"><span class="pkico">🖼️</span><span><b>Choose from gallery</b><i>Pick one or several</i></span></button>
   <button class="pkcancel" id="pkCancel">Cancel</button>
 </div></div>
+
+<!-- in-app camera (Android): always opens the back lens -->
+<div id="cam" hidden>
+  <video id="camVideo" playsinline muted autoplay></video>
+  <div class="camflash" id="camFlash"></div>
+  <div class="camtop">
+    <div class="sp"></div>
+    <div class="camlabel"><span id="camStep">Photo</span><b id="camSlot">Front of package</b></div>
+    <button class="camicon" id="camTorch" aria-label="Flashlight" hidden>🔦</button>
+    <div class="sp" id="camTorchSp"></div>
+  </div>
+  <div class="camerr" id="camErr" hidden>
+    <div id="camErrMsg"></div>
+    <button class="camdone" id="camFallback">Use the phone’s camera app</button>
+  </div>
+  <div class="cambottom">
+    <div class="camthumbs" id="camThumbs"></div>
+    <button class="camshutter" id="camShot" aria-label="Take photo"></button>
+    <button class="camdone" id="camDone">Cancel</button>
+  </div>
+</div>
 
 <div id="imgZoom" hidden><img id="zoomImg" alt=""></div>
 
@@ -1235,6 +1282,165 @@ async function acceptPhotos(files) {
   }
   const extra = files.length - slots.length;
   if (extra > 0) toast(`Added ${slots.length}. ${extra} skipped — no empty slot left`, 2800);
+}
+
+/* ---- in-app camera (Android) ----------------------------------------------
+   Android camera apps ignore capture="environment" and reopen whichever lens
+   was used last, often the selfie one. Here the app opens the camera itself
+   with getUserMedia and asks for the back lens, preferring the main one (some
+   phones default to an ultra-wide that cannot focus on a label up close).
+   iOS keeps the native camera, which already opens on the back lens.        */
+const isAndroid = () => /Android/i.test(navigator.userAgent) ||
+  !!(navigator.userAgentData && navigator.userAgentData.platform === 'Android');
+const useInAppCamera = () => isAndroid() && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+let camStream = null, camQueue = [], camView = null, camBusy = false, camTorchOn = false, camTaken = 0, camGen = 0;
+const CAM_RES = { width: { ideal: 2560 }, height: { ideal: 1440 } };
+
+async function startCamera() {
+  let saved = null;
+  try { saved = localStorage.getItem('fcCamId'); } catch (e) {}
+  const tries = [];
+  if (saved) tries.push(Object.assign({ deviceId: { exact: saved } }, CAM_RES));
+  tries.push(Object.assign({ facingMode: { exact: 'environment' } }, CAM_RES));
+  tries.push(Object.assign({ facingMode: 'environment' }, CAM_RES));
+  let err;
+  for (const v of tries) {
+    try {
+      const st = await navigator.mediaDevices.getUserMedia({ video: v, audio: false });
+      const tr = st.getVideoTracks()[0];
+      const set = (tr && tr.getSettings && tr.getSettings()) || {};
+      if (set.facingMode === 'user') {                      // that lens turned out to be the selfie one
+        st.getTracks().forEach(t => t.stop());
+        try { localStorage.removeItem('fcCamId'); } catch (e) {}
+        continue;
+      }
+      return st;
+    } catch (e) {
+      err = e;
+      if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) break;
+    }
+  }
+  throw err || new Error('no back camera');
+}
+async function pickMainBackCamera(stream) {
+  try {
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+    const backs = devs.filter(d => /back|rear|environment/i.test(d.label || ''));
+    if (!backs.length) return stream;
+    const idx = d => { const m = String(d.label).match(/camera2?\s*(\d+)/i); return m ? +m[1] : 99; };
+    const best = backs.slice().sort((a, b) => idx(a) - idx(b))[0];
+    const cur = (stream.getVideoTracks()[0].getSettings() || {}).deviceId;
+    if (best.deviceId) { try { localStorage.setItem('fcCamId', best.deviceId); } catch (e) {} }
+    if (!best.deviceId || best.deviceId === cur || backs.length < 2) return stream;
+    stream.getTracks().forEach(t => t.stop());
+    return await navigator.mediaDevices.getUserMedia({ video: Object.assign({ deviceId: { exact: best.deviceId } }, CAM_RES), audio: false });
+  } catch (e) { return stream; }
+}
+function camLabel() {
+  const titles = camView === 'add' ? SLOT_TITLE : Q_SLOT_TITLE;
+  const total = camTaken + camQueue.length;
+  $('#camStep').textContent = total > 1 ? `Photo ${camTaken + 1} of ${total}` : 'Photo';
+  $('#camSlot').textContent = titles[camQueue[0]] || '';
+  $('#camDone').textContent = camTaken ? 'Done' : 'Cancel';
+}
+function camError(msg) {
+  $('#camErrMsg').textContent = msg;
+  $('#camErr').hidden = false;
+  $('#camShot').disabled = true;
+}
+async function openCamera() {
+  const t = pickTarget;
+  if (!t) return;
+  const order = t.view === 'add' ? SLOTS : Q_SLOTS;
+  const filled = t.view === 'add' ? draft.photos : qPhotos;
+  const gen = ++camGen;
+  camView = t.view; camTaken = 0; camTorchOn = false;
+  camQueue = [t.slot, ...order.filter(s => s !== t.slot && !filled[s])];
+  $('#camThumbs').innerHTML = '';
+  $('#camErr').hidden = true;
+  $('#camShot').disabled = true;
+  $('#camTorch').hidden = true; $('#camTorchSp').hidden = false; $('#camTorch').classList.remove('on');
+  camLabel();
+  $('#cam').hidden = false;
+  document.body.style.overflow = 'hidden';
+  let st;
+  try {
+    st = await pickMainBackCamera(await startCamera());
+  } catch (e) {
+    if (gen !== camGen) return;
+    camError(e && e.name === 'NotAllowedError'
+      ? 'Camera access is blocked for FoodCheck. You can allow it in your browser\u2019s site settings, or use the phone\u2019s camera app for now.'
+      : 'Couldn\u2019t start the back camera.');
+    return;
+  }
+  if (gen !== camGen || $('#cam').hidden) { st.getTracks().forEach(tr => tr.stop()); return; }   // closed/reopened while starting
+  camStream = st;
+  const v = $('#camVideo');
+  v.srcObject = camStream;
+  try { await v.play(); } catch (e) {}
+  const track = camStream.getVideoTracks()[0];
+  const caps = (track.getCapabilities && track.getCapabilities()) || {};
+  if (caps.torch) { $('#camTorch').hidden = false; $('#camTorchSp').hidden = true; }
+  if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous'))
+    track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+  $('#camShot').disabled = false;
+}
+function stopCamStream() {
+  if (camStream) camStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+  camStream = null;
+  const v = $('#camVideo'); if (v) v.srcObject = null;
+}
+function closeCamera() {
+  camGen++;
+  stopCamStream();
+  camTorchOn = false;
+  $('#cam').hidden = true;
+  $('#camErr').hidden = true;
+  document.body.style.overflow = '';
+}
+async function toggleTorch() {
+  if (!camStream) return;
+  const track = camStream.getVideoTracks()[0];
+  try {
+    await track.applyConstraints({ advanced: [{ torch: !camTorchOn }] });
+    camTorchOn = !camTorchOn;
+    $('#camTorch').classList.toggle('on', camTorchOn);
+  } catch (e) { toast('Flashlight not available'); }
+}
+async function grabFrame() {
+  if (window.__TEST_FRAME) return window.__TEST_FRAME;          // headless test hook
+  const v = $('#camVideo');
+  if (!v.videoWidth) throw new Error('camera not ready');
+  const c = document.createElement('canvas');
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+  return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('no frame')), 'image/jpeg', 0.92));
+}
+async function camShoot() {
+  if (camBusy || !camStream || !camQueue.length) return;
+  camBusy = true; $('#camShot').disabled = true;
+  const slot = camQueue[0];
+  try {
+    const blob = await grabFrame();
+    const fl = $('#camFlash'); fl.classList.add('on'); setTimeout(() => fl.classList.remove('on'), 60);
+    try { navigator.vibrate && navigator.vibrate(25); } catch (e) {}
+    const file = new File([blob], 'camera-' + slot + '.jpg', { type: 'image/jpeg' });
+    if (camView === 'add') await onSlotFile(slot, file, true); else await onCheckFile(slot, file, true);
+    const got = camView === 'add' ? draft.photos[slot] : qPhotos[slot];
+    if (got && got.thumb) { const im = document.createElement('img'); im.src = got.thumb; im.alt = ''; $('#camThumbs').append(im); }
+    camQueue.shift(); camTaken++;
+    if (!camQueue.length) { closeCamera(); toast(camTaken > 1 ? camTaken + ' photos added \u2713' : 'Photo added \u2713', 1600); return; }
+    camLabel();
+  } catch (e) {
+    toast('Couldn\u2019t take that photo \u2014 try again');
+  } finally {
+    camBusy = false;
+    if (camStream) $('#camShot').disabled = false;
+  }
+}
+function takePhoto() {
+  closePicker();
+  if (useInAppCamera()) openCamera(); else $('#camIn').click();
 }
 
 async function onSlotFile(slot, file, quiet) {
@@ -2550,7 +2756,8 @@ function bindEvents() {
   document.querySelector('#sheet .grab').addEventListener('click', closeSheet);
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    if (!$('#picker').hidden) closePicker(); else closeSheet();
+    if (!$('#cam').hidden) closeCamera();
+    else if (!$('#picker').hidden) closePicker(); else closeSheet();
   });
   (() => {
     const sheet = $('#sheet');
@@ -2597,7 +2804,12 @@ function bindEvents() {
 
   for (const s of SLOTS)   $(SLOT_BTN[s]).addEventListener('click', () => openPicker('add', s));
   for (const s of Q_SLOTS) $(Q_SLOT_BTN[s]).addEventListener('click', () => openPicker('check', s));
-  $('#pkCam').onclick    = () => runPicker('#camIn');
+  $('#pkCam').onclick    = takePhoto;
+  $('#camShot').onclick  = camShoot;
+  $('#camDone').onclick  = closeCamera;
+  $('#camTorch').onclick = toggleTorch;
+  $('#camFallback').onclick = () => { closeCamera(); $('#camIn').click(); };
+  document.addEventListener('visibilitychange', () => { if (document.hidden && !$('#cam').hidden) closeCamera(); });
   $('#pkGal').onclick    = () => runPicker('#galIn');
   $('#pkCancel').onclick = closePicker;
   $('#picker').addEventListener('click', e => { if (e.target.id === 'picker') closePicker(); });
@@ -2742,6 +2954,8 @@ window.__FC = {
   setQ: (res, photos) => { qResult = res; if (photos) qPhotos = photos; },
   state: () => ({ items, filter }),
   draftState: () => draft, setDraftPhotos: p => { draft = { status: null, photos: p }; },
+  openCamera, closeCamera, camShoot, takePhoto, toggleTorch,
+  camState: () => ({ camQueue, camTaken, camView, camTorchOn, hasStream: !!camStream }),
   joinWithKey, onInvGo, showLockStep, maybeShowLock, keyHandoff, keyHandoffGive, keyHandoffReceive, ensureDeviceKey, syncNow,
   settingsState: () => settings, setSettings: o => { settings = Object.assign(settings, o); },
   resetKeyTimer: () => { lastKeyCheck = 0; },
