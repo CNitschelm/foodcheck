@@ -1260,7 +1260,7 @@ async function openDetail(id) {
     ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
     <div class="dmeta">${it.barcode ? 'Barcode ' + esc(it.barcode) + ' · ' : ''}Added ${new Date(it.createdAt).toLocaleDateString()}</div>
     ${it.pending ? '<div class="hint">🤖 Identifying in the background — details fill in automatically.</div>' : ''}
-    ${(it.aiFailed && !it.name) ? `<div class="dupwarn">⚠️ Couldn\u2019t identify this one automatically${it.lastAiErr ? ' (' + esc(it.lastAiErr) + ')' : ''}. Tap <b>\u21bb Identify again</b>, or use Edit to type the details.</div>` : ''}
+    ${(it.aiFailed && !it.name) ? `<div class="dupwarn">⚠️ Couldn’t identify this one automatically${it.lastAiErr ? ' (' + esc(it.lastAiErr) + ')' : ''}. Tap <b>↻ Identify again</b>, or use Edit to type the details.</div>` : ''}
     ${(() => { const d = dupPartner(it); return d ? `<div class="dupwarn">⚠️ Same barcode as <b>${esc(d.name || 'another item')}</b> — likely the same product saved twice.<button class="btn sm danger" id="dDelDup" style="margin-top:8px;width:100%">Delete this duplicate</button></div>` : ''; })()}
     <div class="drow">
       <button class="btn ghost" id="dIdentify">↻ Identify again</button>
@@ -1585,8 +1585,8 @@ async function openCamera() {
   } catch (e) {
     if (gen !== camGen) return;
     camError(e && e.name === 'NotAllowedError'
-      ? 'Camera access is blocked for FoodCheck. You can allow it in your browser\u2019s site settings, or use the phone\u2019s camera app for now.'
-      : 'Couldn\u2019t start the back camera.');
+      ? 'Camera access is blocked for FoodCheck. You can allow it in your browser’s site settings, or use the phone’s camera app for now.'
+      : 'Couldn’t start the back camera.');
     return;
   }
   if (gen !== camGen || $('#cam').hidden) { st.getTracks().forEach(tr => tr.stop()); return; }   // closed/reopened while starting
@@ -1645,10 +1645,10 @@ async function camShoot() {
     const got = camView === 'add' ? draft.photos[slot] : qPhotos[slot];
     if (got && got.thumb) { const im = document.createElement('img'); im.src = got.thumb; im.alt = ''; $('#camThumbs').append(im); }
     camQueue.shift(); camTaken++;
-    if (!camQueue.length) { closeCamera(); toast(camTaken > 1 ? camTaken + ' photos added \u2713' : 'Photo added \u2713', 1600); return; }
+    if (!camQueue.length) { closeCamera(); toast(camTaken > 1 ? camTaken + ' photos added ✓' : 'Photo added ✓', 1600); return; }
     camLabel();
   } catch (e) {
-    toast('Couldn\u2019t take that photo \u2014 try again');
+    toast('Couldn’t take that photo — try again');
   } finally {
     camBusy = false;
     if (camStream) $('#camShot').disabled = false;
@@ -1759,7 +1759,7 @@ async function saveForm() {
 
 /* ---------------- AI providers ---------------- */
 const AI_MODEL = 'claude-haiku-4-5-20251001';
-const AI_PROMPT = 'Identify the grocery product in the photo(s) (package front and/or barcode/nutrition label). Step 1: identify the exact product \u2014 brand and full product name as printed, INCLUDING the specific flavour/variant shown on the front (e.g. \'Grilled Corn\', \'Red Bean\'); products in the same range differ only by flavour, so read it carefully from this photo and do not assume. Step 2: nutrition values STRICTLY per 100 g (per 100 ml for drinks). Labels often print per serving or per package \u2014 you MUST convert to per 100 g using the printed serving size or net weight (example: values for a 50 g bag \u00d7 2 = per 100 g). Set "nutrition_source":"label" only if values are read directly from, or correctly converted from, a visible label. If no label or no conversion basis is visible, use your knowledge of this exact product for typical per-100 g values and set "nutrition_source":"estimate". Reply with ONLY minified JSON, no markdown: {"name":"","brand":"","category":"","quantity":"","barcode":"","nutrition_source":"label|estimate","nutrition":{"kcal":0,"fat":0,"satfat":0,"carbs":0,"sugars":0,"fiber":0,"protein":0,"salt":0}}. Rules: category = 1-2 words like Snacks, Dairy, Beverages; quantity = net weight/volume if visible; barcode = digits only if clearly readable, else ""; only use null for values you cannot even estimate; never output per-serving or per-package numbers. CAUTION: many labels (especially Thai) state several servings per package \u2014 per-serving values \u00d7 servings-per-pack = whole pack, then \u00f7 net weight \u00d7 100 = per 100 g. Sanity-check your result against typical values (dry snacks/chips \u2248 350-600 kcal per 100 g, drinks usually < 100): if your number looks like half or double the typical value, re-check the serving math.';
+const AI_PROMPT = 'Identify the grocery product in the photo(s) (package front and/or barcode/nutrition label). Step 1: identify the exact product — brand and full product name as printed, INCLUDING the specific flavour/variant shown on the front (e.g. \'Grilled Corn\', \'Red Bean\'); products in the same range differ only by flavour, so read it carefully from this photo and do not assume. Step 2: nutrition values STRICTLY per 100 g (per 100 ml for drinks). Labels often print per serving or per package — you MUST convert to per 100 g using the printed serving size or net weight (example: values for a 50 g bag × 2 = per 100 g). Set "nutrition_source":"label" only if values are read directly from, or correctly converted from, a visible label. If no label or no conversion basis is visible, use your knowledge of this exact product for typical per-100 g values and set "nutrition_source":"estimate". Reply with ONLY minified JSON, no markdown: {"name":"","brand":"","category":"","quantity":"","barcode":"","nutrition_source":"label|estimate","nutrition":{"kcal":0,"fat":0,"satfat":0,"carbs":0,"sugars":0,"fiber":0,"protein":0,"salt":0}}. Rules: category = 1-2 words like Snacks, Dairy, Beverages; quantity = net weight/volume if visible; barcode = digits only if clearly readable, else ""; only use null for values you cannot even estimate; never output per-serving or per-package numbers. CAUTION: many labels (especially Thai) state several servings per package — per-serving values × servings-per-pack = whole pack, then ÷ net weight × 100 = per 100 g. Sanity-check your result against typical values (dry snacks/chips ≈ 350-600 kcal per 100 g, drinks usually < 100): if your number looks like half or double the typical value, re-check the serving math.';
 const GEMINI_MODEL = 'gemini-flash-latest';
 const GEMINI_FALLBACKS = [GEMINI_MODEL, 'gemini-flash-lite-latest', 'gemini-2.0-flash'];
 
@@ -1859,6 +1859,8 @@ const KCAL_RANGES = [
   [/nut\b|nuts|almond|cashew|peanut|pistachio|walnut/i, 450, 720],
   [/chocolate|candy|confection/i, 350, 620],
   [/chip|crisp|cracker|biscuit|cookie|granola|cereal|muesli/i, 300, 620],
+  [/cottage|ricotta|quark|fromage frais/i, 50, 200],    // fresh cheeses: far lighter than hard cheese
+  [/cream cheese/i, 100, 400],
   [/cheese|cheddar|mozzarella|stringer|halloumi|parmesan/i, 180, 460],
   [/salami|sausage|bacon|chorizo|pepperoni/i, 200, 560],
   [/jerky|jerkey|biltong|dried meat|pork crunch|pork rind|crackling/i, 180, 620],
@@ -2270,7 +2272,7 @@ let detailToken = 0;
 const chooserSnoozed = new Set();
 const STOPWORDS = ['the','and','with','for','original','flavor','flavour','flavored','snack','snacks','pack','size','new','file','jpg','jpeg','png'];
 function tokenize(s) {
-  return String(s || '').toLowerCase().replace(/[^a-z0-9\u0e00-\u0e7f ]+/g, ' ')
+  return String(s || '').toLowerCase().replace(/[^a-z0-9฀-๿ ]+/g, ' ')
     .split(/\s+/).filter(t => t.length > 2 && !STOPWORDS.includes(t));
 }
 function relevant(item, textParts) {
@@ -2865,7 +2867,7 @@ function renderSettings() {
   $('#adminZone').hidden = (location.hash !== '#admin');
   const loggedIn = !!(ghConfigured() || settings.aiKey);
   $('#acctStatus').textContent = loggedIn
-    ? '\u2713 Logged in' + (settings.userName ? ' as ' + settings.userName : '') + ' \u2014 your items and photos back up automatically.'
+    ? '✓ Logged in' + (settings.userName ? ' as ' + settings.userName : '') + ' — your items and photos back up automatically.'
       + (settings.ghLogin && !settings.aiKey ? ' Photo reading switches on by itself shortly.' : '')
     : 'Not logged in on this device.';
   $('#loginBtn').hidden = loggedIn;
@@ -2875,7 +2877,7 @@ function renderSettings() {
   $('#sAiKey').value = settings.aiKey || '';
   const g = live().filter(i => i.status === 'good').length;
   const b = live().filter(i => i.status === 'bad').length;
-  $('#statsLine').textContent = `${live().length} items \u2014 ${g} good, ${b} bad.`;
+  $('#statsLine').textContent = `${live().length} items — ${g} good, ${b} bad.`;
   dbGetMeta('lastSync').then(t => {
     $('#sStatus').textContent = t ? 'Last sync: ' + new Date(t).toLocaleString() : (ghConfigured() ? '' : 'Sync not configured.');
   }).catch(() => {});
@@ -3075,7 +3077,7 @@ function bindEvents() {
   $('#sAiSave').onclick = async () => {
     settings.aiKey = $('#sAiKey').value.trim();
     await dbSetMeta('settings', { ...settings });
-    toast(settings.aiKey ? 'AI key saved \u2014 photo auto-fill is on' : 'AI key removed');
+    toast(settings.aiKey ? 'AI key saved — photo auto-fill is on' : 'AI key removed');
     processQueue();
   };
   $('#sCacheImgs').onclick = cacheAllImages;
@@ -3123,6 +3125,30 @@ function blockPinchZoom() {
     lastTouch = now;
   }, { passive: false });
 }
+/* One-off data fixes (30 Sep 2026). The old calorie check treated cottage cheese like hard
+   cheese (180-460 kcal), so it threw out the correct Open Food Facts data for Bulla and the
+   AI filled in generic full-fat values. Values below are from the pack's barcode
+   (9310161005006) on Open Food Facts / Woolworths, per 100 g. A fix only applies while the
+   item still holds the known-bad values, so it runs once and never overrides a later edit. */
+const DATA_FIXES = [
+  { id: '1977ebcd-041b-49d0-89f9-02c46b59e8f6',            // Bulla Cottage Cheese Original 200 g
+    bad: { kcal: 98, fat: 4.3, protein: 11.6 },
+    good: { kcal: 82, fat: 1.8, satfat: 1.2, carbs: 4.3, sugars: 4.2, fiber: 0, protein: 12, salt: 0.8 } }
+];
+async function applyDataFixes() {
+  let fixed = 0;
+  for (const f of DATA_FIXES) {
+    const it = items.find(i => i.id === f.id);
+    const n = (it && it.nutrition) || {};
+    if (!it || it.deletedAt || !Object.keys(f.bad).every(k => num(n[k]) === f.bad[k])) continue;
+    it.nutrition = { ...n, ...f.good };
+    it.nutriSource = 'label';
+    it.updatedAt = Date.now();                    // newer than the synced copy, so sync pushes it
+    await dbPutItem(clean(it));
+    fixed++;
+  }
+  return fixed;
+}
 async function init() {
   blockPinchZoom();
   await openDB();
@@ -3142,6 +3168,7 @@ async function init() {
     }
   }
   for (const it of items) if (it.hasImage && !it.imgs) it.imgs = { f: 1 }; // legacy migration
+  await applyDataFixes().catch(e => console.warn('data fix skipped', e));   // one-off corrections, see DATA_FIXES
   bindEvents();
   const cats = [...new Set(live().map(i => i.category).filter(Boolean))].sort();
   $('#catList').innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
@@ -3177,7 +3204,7 @@ window.__FC = {
   resetKeyTimer: () => { lastKeyCheck = 0; },
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
-  renderList
+  renderList, applyDataFixes
 };
 </script>
 </body>
