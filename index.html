@@ -1257,7 +1257,7 @@ async function openDetail(id) {
         .map(e => `<span class="whochip ${e.v}${e.who === meId() ? ' mine' : ''}">${esc(e.who)}: ${lbl(e.v)}</span>`).join('')}</div>`; })()}
     ${it.notes ? `<div class="dnotes">${esc(it.notes)}</div>` : ''}
     ${rateBoxHTML(it)}
-    ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
+    ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : it.nutriSource === 'verified' ? ' · verified' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
     <div class="dmeta">${it.barcode ? 'Barcode ' + esc(it.barcode) + ' · ' : ''}Added ${new Date(it.createdAt).toLocaleDateString()}</div>
     ${it.pending ? '<div class="hint">🤖 Identifying in the background — details fill in automatically.</div>' : ''}
     ${(it.aiFailed && !it.name) ? `<div class="dupwarn">⚠️ Couldn’t identify this one automatically${it.lastAiErr ? ' (' + esc(it.lastAiErr) + ')' : ''}. Tap <b>↻ Identify again</b>, or use Edit to type the details.</div>` : ''}
@@ -1866,6 +1866,7 @@ const KCAL_RANGES = [
   [/jerky|jerkey|biltong|dried meat|pork crunch|pork rind|crackling/i, 180, 620],
   [/yogh?urt|yogurt|kefir/i, 25, 200],
   [/milk|juice|drink|soda|beverage|water|tea|coffee/i, 0, 100],
+  [/jam\b|marmalade|fruit spread|preserves?\b|conserve/i, 100, 350],   // sugar-dense, unlike fresh fruit
   [/berry|berries|fruit|vegetable|veg\b|salad|greens/i, 10, 150],
   [/chicken|beef|pork|fish|tuna|salmon|turkey|meat|prawn|shrimp/i, 70, 450],
   [/bread|rice|pasta|noodle|tortilla|wrap/i, 80, 400]
@@ -2818,8 +2819,12 @@ async function syncNow(auto) {
     const { merged, localAhead, remoteApplied } = mergeItems(items, remote);
     items = merged;
     if (remoteApplied) { for (const it of merged) await dbPutItem(clean(it)); }
+    // 2b) verified fixes from the weekly deep check
+    let fixed = [];
+    try { const ct = await ghGetRawText(CORR_PATH); if (ct) fixed = applyCorrections(JSON.parse(ct).corrections); } catch (e) {}
+    for (const it of fixed) await dbPutItem(clean(it));
     // 3) push items.json if local has newer/extra data
-    if (localAhead || (!txt && items.length)) {
+    if (localAhead || fixed.length || (!txt && items.length)) {
       let sha = null;
       const dir = await ghListDir('data');
       const f = dir.find(e => e.name === 'items.json'); if (f) sha = f.sha;
@@ -3125,29 +3130,42 @@ function blockPinchZoom() {
     lastTouch = now;
   }, { passive: false });
 }
-/* One-off data fixes (30 Sep 2026). The old calorie check treated cottage cheese like hard
-   cheese (180-460 kcal), so it threw out the correct Open Food Facts data for Bulla and the
-   AI filled in generic full-fat values. Values below are from the pack's barcode
-   (9310161005006) on Open Food Facts / Woolworths, per 100 g. A fix only applies while the
-   item still holds the known-bad values, so it runs once and never overrides a later edit. */
-const DATA_FIXES = [
-  { id: '1977ebcd-041b-49d0-89f9-02c46b59e8f6',            // Bulla Cottage Cheese Original 200 g
-    bad: { kcal: 98, fat: 4.3, protein: 11.6 },
-    good: { kcal: 82, fat: 1.8, satfat: 1.2, carbs: 4.3, sugars: 4.2, fiber: 0, protein: 12, salt: 0.8 } }
-];
-async function applyDataFixes() {
-  let fixed = 0;
-  for (const f of DATA_FIXES) {
-    const it = items.find(i => i.id === f.id);
-    const n = (it && it.nutrition) || {};
-    if (!it || it.deletedAt || !Object.keys(f.bad).every(k => num(n[k]) === f.bad[k])) continue;
-    it.nutrition = { ...n, ...f.good };
-    it.nutriSource = 'label';
-    it.updatedAt = Date.now();                    // newer than the synced copy, so sync pushes it
-    await dbPutItem(clean(it));
-    fixed++;
+/* ---------------- verified corrections (weekly deep check) ----------------
+   The weekly deep check compares each item with its label photo, the exact
+   barcode on Open Food Facts, and the maker's or a big retailer's listing,
+   then writes the fixes it is sure of to data/corrections.json in the data
+   repo. Each device applies them while syncing, but only while an item's
+   nutrition still equals exactly the numbers the check saw ("from"), so a fix
+   lands once and never overrides a later edit. Only nutrition numbers change.
+   checkKey remembers the last fix applied, so a confirm-only entry (to = from)
+   marks an item verified once instead of on every sync.                     */
+const CORR_PATH = 'data/corrections.json';
+const NUT_KEYS = ['kcal', 'fat', 'satfat', 'carbs', 'sugars', 'fiber', 'protein', 'salt'];
+const sameNum = (a, b) => a == null ? b == null : b != null && Math.abs(a - b) < 0.051;
+function applyCorrections(list) {
+  const changed = [];
+  for (const c of Array.isArray(list) ? list : []) {
+    const it = c && c.id ? items.find(i => i.id === c.id) : null;
+    if (!it || it.deletedAt || !c.key || !c.from || !c.to || it.checkKey === String(c.key)) continue;
+    const n = it.nutrition || {};
+    if (!NUT_KEYS.every(k => sameNum(num(n[k]), num(c.from[k])))) continue;   // changed since the check
+    const upd = {};
+    for (const k of NUT_KEYS) {
+      const v = num(c.to[k]);
+      if (v != null && v >= 0 && v <= (k === 'kcal' ? 950 : 100)) upd[k] = v;
+    }
+    if (upd.kcal == null) continue;                            // a fix always carries calories
+    it.nutrition = { ...n, ...upd };
+    const est = (Array.isArray(c.estimated) ? c.estimated : []).filter(k => NUT_KEYS.includes(k) && !(k in upd));
+    it.derived = [...new Set([...(it.derived || []).filter(k => !(k in upd)), ...est])];
+    if (!it.derived.length) delete it.derived;
+    ['autoScaled', 'dataWarn', 'labelOverrode', 'offSuspect'].forEach(k => delete it[k]);
+    it.nutriSource = 'verified';
+    it.checkKey = String(c.key);
+    it.updatedAt = Date.now();
+    changed.push(it);
   }
-  return fixed;
+  return changed;
 }
 async function init() {
   blockPinchZoom();
@@ -3168,7 +3186,6 @@ async function init() {
     }
   }
   for (const it of items) if (it.hasImage && !it.imgs) it.imgs = { f: 1 }; // legacy migration
-  await applyDataFixes().catch(e => console.warn('data fix skipped', e));   // one-off corrections, see DATA_FIXES
   bindEvents();
   const cats = [...new Set(live().map(i => i.category).filter(Boolean))].sort();
   $('#catList').innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
@@ -3204,7 +3221,7 @@ window.__FC = {
   resetKeyTimer: () => { lastKeyCheck = 0; },
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
-  renderList, applyDataFixes
+  renderList, applyCorrections
 };
 </script>
 </body>
