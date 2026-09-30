@@ -1151,14 +1151,27 @@ function matches(it, q) {
   const hay = [it.name, it.brand, it.notes, it.barcode, it.category].join(' ').toLowerCase();
   return q.toLowerCase().split(/\s+/).every(w => hay.includes(w));
 }
+/* List order. "Newest" = date added (createdAt), the date the item sheet shows.
+   It used to sort by last change (updatedAt), which background work bumps all
+   the time (identifying, photo search, sync, weekly corrections), so the list
+   reshuffled itself and "Newest" was not the newest. Every mode now ends with
+   the same tie-breaks (date added, then id), so items that tie always keep one
+   fixed order instead of whatever order the last sync left the array in. */
+const addedAt = it => +it.createdAt || 0;
+const byId = (a, b) => { const x = String(a.id), y = String(b.id); return x < y ? -1 : x > y ? 1 : 0; };
+const byNewest = (a, b) => addedAt(b) - addedAt(a) || byId(a, b);
+function sortList(list, mode) {
+  if (mode === 'az') return list.sort((a, b) => (a.name || '').localeCompare(b.name || '') || byNewest(a, b));
+  if (mode === 'nut') {                      // best score first; a real 0 still ranks above "no data"
+    const sc = new Map(list.map(i => { const r = nutriRate(i); return [i, r ? r.score : -1]; }));
+    return list.sort((a, b) => sc.get(b) - sc.get(a) || byNewest(a, b));
+  }
+  return list.sort(byNewest);
+}
 function renderList() {
   let list = live().filter(i => (filter === 'all' || deriveStatus(i) === filter) && matches(i, searchQ));
   if (nutMin) list = list.filter(i => { const r = nutriRate(i); return r && r.stars >= nutMin; });
-  list.sort(sortMode === 'az'
-    ? (a, b) => (a.name || '').localeCompare(b.name || '')
-    : sortMode === 'nut'
-    ? (a, b) => ((nutriRate(b) || {}).score || -1) - ((nutriRate(a) || {}).score || -1)
-    : (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  sortList(list, sortMode);
 
   const g = live().filter(i => deriveStatus(i) === 'good').length;
   const b = live().filter(i => deriveStatus(i) === 'bad').length;
@@ -3013,6 +3026,7 @@ function bindEvents() {
   })();
 
   $('#searchBox').addEventListener('input', debounce(e => { searchQ = e.target.value.trim(); renderList(); }, 150));
+  $('#sortSel').value = sortMode;             // a browser restoring an old menu value must not leave menu and list disagreeing
   $('#sortSel').onchange = e => { sortMode = e.target.value; renderList(); };
   document.querySelectorAll('#statusChips .chip').forEach(ch => ch.onclick = () => {
     filter = ch.dataset.f;
