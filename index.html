@@ -449,7 +449,8 @@ nav .addbig.on{color:#fff;box-shadow:0 0 0 3px var(--bg),0 0 0 4.5px color-mix(i
 .joinsteps li{padding-left:2px}
 .joinsteps li::marker{font-weight:700;color:var(--brand-fg)}
 a.lklink{display:flex;text-decoration:none}
-#invKey{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px}
+#invKey,#ownKey{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px}
+.lkstep>p.lkhint{margin:0;font-size:13.5px;font-weight:400;line-height:1.45;color:var(--muted)}
 
 /* ---- photo picker sheet ---- */
 #picker{position:fixed;inset:0;z-index:310;display:flex;align-items:flex-end;justify-content:center;padding:10px;
@@ -568,10 +569,22 @@ a.lklink{display:flex;text-decoration:none}
     <p class="locktag">Your personal good/bad grocery list.</p>
   </div>
 
-  <div class="lkstep" id="lkWho">
+  <div class="lkstep" id="lkOwn">
+    <p>Set up your list on this phone.</p>
+    <input id="ownName" placeholder="Your name" maxlength="24" autocomplete="given-name" autocapitalize="words" spellcheck="false">
+    <input id="ownKey" type="password" placeholder="Free AI key (optional)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <a class="btn ghost lklink" id="ownGetKey" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free AI key ↗</a>
+    <p class="lkhint">The key lets a photo fill in the product for you. Without one, barcode lookup and typing still work, and you can add a key later in Settings.</p>
+    <button class="btn" id="ownGo">Start</button>
+    <div class="lockerr" id="ownErr"></div>
+    <button class="btn ghost sm" id="lkSignIn">Invited or already set up? Sign in</button>
+  </div>
+
+  <div class="lkstep" id="lkWho" hidden>
     <p>How are you signing in on this phone?</p>
     <button class="lkbig" id="lkInvBtn"><span class="lkico"><svg class="i"><use href="#i-mail"/></svg></span><span class="lktx"><b>I was invited</b><i>Sign in with your own GitHub key</i></span><svg class="i chev"><use href="#i-chev-right"/></svg></button>
     <button class="lkbig" id="lkPwBtn"><span class="lkico"><svg class="i"><use href="#i-key"/></svg></span><span class="lktx"><b>I have the password</b><i>For the owner's own devices</i></span><svg class="i chev"><use href="#i-chev-right"/></svg></button>
+    <button class="btn ghost sm" id="lkWhoBack"><svg class="i"><use href="#i-chev-left"/></svg>Back</button>
   </div>
 
   <div class="lkstep" id="lkPw" hidden>
@@ -697,7 +710,7 @@ a.lklink{display:flex;text-decoration:none}
   <!-- ============ SETTINGS ============ -->
   <section id="view-settings" hidden>
     <h2 class="pagetitle">Settings</h2>
-    <div class="setgroup">
+    <div class="setgroup" id="sgAccount">
       <div class="setlabel">Account</div>
       <div class="formcard">
         <div class="acctrow">
@@ -715,14 +728,14 @@ a.lklink{display:flex;text-decoration:none}
         <div class="setlabel">Who is using this device</div>
         <div class="formcard">
           <div class="stack">
-            <div class="field"><label for="sUserName">Name on this device's verdicts</label>
+            <div class="field"><label for="sUserName">Your name (shown on your Good/Bad picks)</label>
               <input id="sUserName" autocomplete="off"></div>
             <button class="btn sm" id="sNameSave" style="align-self:flex-start">Save name</button>
-            <div class="hint">Defaults to Cory. Only change this on the second person's device.</div>
+            <div class="hint" id="sNameHint">Defaults to Cory. Only change this on the second person's device.</div>
           </div>
         </div>
       </div>
-      <div class="setgroup">
+      <div class="setgroup" id="sgSync">
         <div class="setlabel">GitHub sync (cross-device)</div>
         <div class="formcard">
           <div class="stack">
@@ -751,7 +764,7 @@ a.lklink{display:flex;text-decoration:none}
           </div>
         </div>
       </div>
-      <div class="setgroup">
+      <div class="setgroup" id="sgBundle">
         <div class="setlabel">One-password login</div>
         <div class="formcard">
           <div class="stack">
@@ -769,7 +782,7 @@ a.lklink{display:flex;text-decoration:none}
         <button class="setrow" id="impBtn"><span class="srico"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg></span><span class="srtx">Restore backup</span><svg class="i chev" aria-hidden="true"><use href="#i-chev-right"/></svg></button>
         <input type="file" accept="application/json,.json" id="impInput" hidden>
       </div>
-      <div class="setnote">Everything already backs up online automatically — this is just an extra manual copy (photos included).</div>
+      <div class="setnote" id="bkNote">Everything already backs up online automatically — this is just an extra manual copy (photos included).</div>
     </div>
     <div class="setgroup">
       <div class="setlabel">About</div>
@@ -2549,9 +2562,11 @@ async function tryUnlock() {
     settings = Object.assign(settings, cfg);
     if (!settings.userName || settings.ghLogin) settings.userName = 'Cory';   // the password bundle is the owner's
     settings.ghLogin = '';
+    settings.ownList = false;
     try { localStorage.removeItem('fcLockStep'); } catch (e) {}
     await dbSetMeta('settings', { ...settings });
     $('#lock').hidden = true;
+    applyModeUI();
     toast('Device set up ✓ — syncing…');
     syncNow(true);
     setTimeout(processQueue, 1500);
@@ -2562,7 +2577,7 @@ async function tryUnlock() {
   }
 }
 async function maybeShowLock(force) {
-  if (!force && (ghConfigured() || settings.aiKey)) return;
+  if (!force && (ghConfigured() || settings.aiKey || settings.ownList)) return;
   lockBundleText = null;
   try {                                   // the password bundle is optional: invited people don't need it
     const r = await fetch(CONFIG_PATH + '?_=' + Date.now(), { cache: 'no-store' });
@@ -2572,12 +2587,13 @@ async function maybeShowLock(force) {
       if (j && j.v === 1 && j.kdf === 'PBKDF2-SHA256' && j.salt && j.iv && j.data) lockBundleText = text;
     }
   } catch (e) {}
-  let step = 'who';
+  let step = 'own';                       // new people start their own list; sign-in options sit one tap away
   try { if (localStorage.getItem('fcLockStep') === 'inv') step = 'inv'; } catch (e) {}
   showLockStep(step);
   $('#lock').hidden = false;
 }
 function showLockStep(step, msg) {
+  $('#lkOwn').hidden = step !== 'own';
   $('#lkWho').hidden = step !== 'who';
   $('#lkPw').hidden = step !== 'pw';
   $('#lkInv').hidden = step !== 'inv';
@@ -2589,6 +2605,10 @@ function showLockStep(step, msg) {
   if (step === 'inv') {
     $('#invErr').textContent = '';
     $('#invMsg').textContent = msg || 'You need your own GitHub key. It takes about a minute:';
+  }
+  if (step === 'own') {
+    $('#ownErr').textContent = '';
+    if (!$('#ownName').value) { try { $('#ownName').value = localStorage.getItem('fcOwnName') || ''; } catch (e) {} }
   }
 }
 
@@ -2646,7 +2666,7 @@ async function joinWithKey(raw) {
     }
   } catch (e) {}
   settings.repo = DATA_REPO; settings.token = token; settings.branch = repo.default_branch || 'main';
-  settings.ghLogin = me.login; settings.userName = name;
+  settings.ghLogin = me.login; settings.userName = name; settings.ownList = false;
   await dbSetMeta('settings', { ...settings });
   return null;
 }
@@ -2665,12 +2685,49 @@ async function onInvGo() {
     try { localStorage.removeItem('fcLockStep'); } catch (e) {}
     $('#invKey').value = '';
     $('#lock').hidden = true;
+    applyModeUI();
     toast('Connected ✓ — hi ' + settings.userName + '! Loading the list…', 3500);
     renderList();
     await syncNow(true);
   } finally {
     btn.disabled = false; btn.textContent = '📋 Paste key & connect';
   }
+}
+
+/* ---- own list: someone new who isn't on Cory's shared list -----------------
+   Their items stay on this phone (no sync, nothing shared) and the AI key is
+   their own and optional. Their phone shows nothing about syncing.           */
+const OWN_KEY_RE = /^(AIza|AQ\.|sk-ant-)[0-9A-Za-z_.\-]{20,}$/;
+async function startOwnList(nameRaw, keyRaw) {
+  const name = String(nameRaw || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+  const key = cleanKey(keyRaw);
+  if (!name) return 'Type your name first — it goes on your Good and Bad picks.';
+  if (key && !OWN_KEY_RE.test(key)) return 'That doesn’t look like an AI key. A free Google key starts with AIza. Copy it again, or leave the box empty for now.';
+  settings = { repo: '', token: '', branch: 'main', aiKey: key, userName: name, ownList: true };
+  await dbSetMeta('settings', { ...settings });
+  return null;
+}
+async function onOwnGo() {
+  const btn = $('#ownGo'), err = $('#ownErr');
+  err.textContent = '';
+  btn.disabled = true;
+  try {
+    const problem = await startOwnList($('#ownName').value, $('#ownKey').value);
+    if (problem) { err.textContent = problem; return; }
+    try { localStorage.removeItem('fcLockStep'); localStorage.removeItem('fcOwnName'); } catch (e) {}
+    $('#ownKey').value = '';
+    $('#lock').hidden = true;
+    applyModeUI();
+    renderList();
+    toast(settings.aiKey ? 'Hi ' + settings.userName + '! Tap Add and snap a product to start.'
+      : 'Hi ' + settings.userName + '! Add a free AI key in Settings any time to fill products in from a photo.', 4000);
+    processQueue();
+  } finally {
+    btn.disabled = false;
+  }
+}
+function applyModeUI() {                  // own-list phones never see syncing
+  $('#syncBtn').hidden = !!settings.ownList && !ghConfigured();
 }
 
 /* ---- AI key hand-off, owner -> invited device, end-to-end encrypted ---------
@@ -2882,12 +2939,20 @@ async function syncNow(auto) {
 
 /* ---------------- settings ---------------- */
 function renderSettings() {
-  $('#adminZone').hidden = (location.hash !== '#admin');
-  const loggedIn = !!(ghConfigured() || settings.aiKey);
-  $('#acctStatus').textContent = loggedIn
-    ? '✓ Logged in' + (settings.userName ? ' as ' + settings.userName : '') + ' — your items and photos back up automatically.'
+  const own = !!settings.ownList, admin = location.hash === '#admin', synced = ghConfigured();
+  $('#adminZone').hidden = !(admin || own);         // own-list phones: name + AI key only, nothing about syncing
+  $('#sgAccount').hidden = own && !admin;
+  $('#sgSync').hidden = own && !admin;
+  $('#sgBundle').hidden = own && !admin;
+  $('#sNameHint').hidden = own;
+  $('#bkNote').textContent = synced
+    ? 'Everything already backs up online automatically — this is just an extra manual copy (photos included).'
+    : 'Your list is saved on this phone only. Download a backup now and then to keep a copy (photos included).';
+  const loggedIn = !!(synced || settings.aiKey || own);
+  $('#acctStatus').textContent = !loggedIn ? 'Not logged in on this device.'
+    : synced ? '✓ Logged in' + (settings.userName ? ' as ' + settings.userName : '') + ' — your items and photos back up automatically.'
       + (settings.ghLogin && !settings.aiKey ? ' Photo reading switches on by itself shortly.' : '')
-    : 'Not logged in on this device.';
+    : '✓ Logged in' + (settings.userName ? ' as ' + settings.userName : '') + ' — your list is saved on this phone only (sync isn’t set up).';
   $('#loginBtn').hidden = loggedIn;
   $('#logoutBtn').hidden = !loggedIn;
   $('#sUserName').value = settings.userName || '';
@@ -2905,6 +2970,7 @@ async function saveSettings() {
   settings.token = $('#sToken').value.trim();
   settings.branch = $('#sBranch').value.trim() || 'main';
   await dbSetMeta('settings', { ...settings });
+  applyModeUI();
   if (!ghConfigured()) { toast('Enter repo (owner/name) and token'); return; }
   $('#sStatus').textContent = 'Testing connection…';
   try {
@@ -3080,16 +3146,23 @@ function bindEvents() {
   $('#lkInvBtn').onclick = () => showLockStep('inv');
   $('#lkPwBack').onclick = () => showLockStep('who');
   $('#lkInvBack').onclick = () => showLockStep('who');
+  $('#lkSignIn').onclick = () => showLockStep('who');
+  $('#lkWhoBack').onclick = () => showLockStep('own');
+  $('#ownGo').onclick = onOwnGo;
+  $('#ownName').addEventListener('input', e => { try { localStorage.setItem('fcOwnName', e.target.value); } catch (er) {} });
+  $('#ownName').addEventListener('keydown', e => { if (e.key === 'Enter') $('#ownKey').focus(); });
+  $('#ownKey').addEventListener('keydown', e => { if (e.key === 'Enter') onOwnGo(); });
   $('#invGo').onclick = onInvGo;
   $('#invKey').addEventListener('keydown', e => { if (e.key === 'Enter') onInvGo(); });
   $('#loginBtn').onclick = () => {
-    if (ghConfigured() || settings.aiKey) { toast('Already logged in on this device'); return; }
+    if (ghConfigured() || settings.aiKey || settings.ownList) { toast('Already logged in on this device'); return; }
     maybeShowLock(true);
   };
   $('#logoutBtn').onclick = async () => {
     if (!confirm('Log out? This removes sync + AI access from this device (your items stay).')) return;
     settings = { repo: '', token: '', branch: 'main', aiKey: '' };
     await dbSetMeta('settings', { ...settings });
+    applyModeUI();
     renderSettings(); toast('Logged out of this device');
   };
   window.addEventListener('hashchange', () => { if (!$('#view-settings').hidden) renderSettings(); });
@@ -3187,7 +3260,7 @@ async function init() {
   items = (await dbAllItems()) || [];
   const st = await dbGetMeta('settings'); if (st) settings = Object.assign(settings, st);
   imgDirty = new Set((await dbGetMeta('imgDirty')) || []);
-  if (!settings.userName && (ghConfigured() || settings.aiKey) && !settings.ghLogin) {
+  if (!settings.userName && (ghConfigured() || settings.aiKey) && !settings.ghLogin && !settings.ownList) {
     settings.userName = 'Cory';                   // devices set up before invites existed are the owner's
     await dbSetMeta('settings', { ...settings });
   }
@@ -3201,6 +3274,7 @@ async function init() {
   }
   for (const it of items) if (it.hasImage && !it.imgs) it.imgs = { f: 1 }; // legacy migration
   bindEvents();
+  applyModeUI();
   const cats = [...new Set(live().map(i => i.category).filter(Boolean))].sort();
   $('#catList').innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
   resetForm();
@@ -3235,7 +3309,7 @@ window.__FC = {
   resetKeyTimer: () => { lastKeyCheck = 0; },
   saveItemObj: async it => { items.push(it); await dbPutItem(clean(it)); },
   reload: async () => { items = await dbAllItems(); return items; },
-  renderList, applyCorrections
+  renderList, applyCorrections, startOwnList, onOwnGo, applyModeUI, renderSettings
 };
 </script>
 </body>
