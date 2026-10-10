@@ -26,6 +26,15 @@ If it can't identify the product (no barcode match, no AI key), you can type the
 3. **Barcode photo** — app reads the barcode and auto-fills name, brand, and nutrition from Open Food Facts (or type the barcode number)
 4. Toggle **Good** / **Bad**, add notes, save
 
+## Your own list (for someone new)
+A new phone opens on a short setup screen: type a name, paste a free AI key (optional), and tap **Start**. That person gets a separate list of their own — nothing is shared with anyone else's list.
+
+- **AI key (optional, free):** aistudio.google.com/apikey → Create API key. It lets a photo fill in the product; without it, barcode lookup and typing still work. It can be added later in Settings.
+- **iPhone:** add the app to the home screen first and set it up from the icon — the icon and Safari keep separate data.
+- **Saved on that phone only:** no syncing and no online backup. Settings → **Download backup** saves a copy.
+- Their phone shows nothing about syncing: no Sync button, and Settings shows just the name, the AI key, and the backup file.
+- Invited people and the owner's own phones tap **Invited or already set up? Sign in** on the setup screen.
+
 ## Run locally
 - Quickest: double-click `index.html` (Chrome/Edge)
 - Proper local server (needed for the offline service worker):
