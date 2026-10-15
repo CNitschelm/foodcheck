@@ -1795,9 +1795,27 @@ const GEMINI_MODEL = 'gemini-flash-latest';
 const GEMINI_FALLBACKS = [GEMINI_MODEL, 'gemini-flash-lite-latest', 'gemini-2.0-flash'];
 
 function extractJSON(txt) {
-  const m = String(txt).match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('unreadable AI reply');
-  return JSON.parse(m[0]);
+  const s = String(txt);
+  const m = s.match(/\{[\s\S]*\}/);
+  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }
+  // replies sometimes wrap the JSON in notes that contain braces, or show their working first:
+  // take the last complete {...} object that parses, preferring one that names a product
+  let best = null, last = null;
+  for (let i = s.indexOf('{'); i >= 0; i = s.indexOf('{', i + 1)) {
+    let depth = 0, inStr = false, esc = false;
+    for (let j = i; j < s.length; j++) {
+      const ch = s[j];
+      if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+      if (ch === '"') inStr = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}' && --depth === 0) {
+        try { const o = JSON.parse(s.slice(i, j + 1)); if (o && typeof o === 'object') { last = o; if (o.name !== undefined || o.nutrition) best = o; } } catch (e) {}
+        break;
+      }
+    }
+  }
+  if (best || last) return best || last;
+  throw new Error('unreadable AI reply');
 }
 async function callClaude(model, content, maxTokens, timeoutMs) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1830,7 +1848,7 @@ async function claudeJSON(content, maxTokens, timeoutMs) {
 async function callAnthropic(imgs) {
   const content = imgs.map(b64 => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } }));
   content.push({ type: 'text', text: AI_PROMPT });
-  return claudeJSON(content, 1000, 60000);
+  return claudeJSON(content, 3000, 60000);         // room for replies that show their serving math before the JSON
 }
 async function callGemini(imgs, model) {
   const parts = imgs.map(b64 => ({ inline_data: { mime_type: 'image/jpeg', data: b64 } }));
