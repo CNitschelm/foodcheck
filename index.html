@@ -2650,7 +2650,10 @@ async function openChooser(id) {
   $('#chImgCur').src = it.thumb || ''; $('#chImgNew').src = it.suggestThumb || '';
   /* a modal dialog, like the picker: what is under it goes inert, focus moves in (to its title, not a button: it opens
      by itself, maybe while someone is typing) and goes back where it was when it closes */
-  if ($('#imgChooser').hidden) { const ae = document.activeElement; chooserReturn = ae && ae !== document.body ? ae : null; }
+  if ($('#imgChooser').hidden) {             // opened under the full-screen photo: it goes back where the photo would have
+    const ae = document.activeElement === $('#imgZoom') ? zoomReturn : document.activeElement;
+    chooserReturn = ae && ae !== document.body ? ae : null;
+  }
   $('#imgChooser').hidden = false;
   document.body.style.overflow = 'hidden';
   updateInert();
