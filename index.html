@@ -294,7 +294,7 @@ main{max-width:860px;margin:0 auto;
 .dthumbs img{width:64px;height:64px;object-fit:cover;border:1px solid var(--line);border-radius:12px;cursor:pointer}
 .dtitle{margin:16px 0 4px;font-size:var(--t-2xl);font-weight:700;letter-spacing:-.02em;line-height:1.2}
 .dtitle:focus{outline:none}   /* focus lands here when the sheet opens (tabindex=-1, not a control) */
-#detailsH:focus,#cards .empty:focus,#cam:focus,#chTitle:focus,#lockTitle:focus{outline:none}   /* the same for the form Edit opens, an emptied list, the camera, the photo chooser and the setup screen */
+#detailsH:focus,#cards .empty:focus,#cam:focus,#imgZoom:focus,#chTitle:focus,#lockTitle:focus{outline:none}   /* the same for the form Edit opens, an emptied list, the camera, the full-screen photo, the photo chooser and the setup screen */
 .dbrand{font-size:var(--t-md);color:var(--muted)}
 .scorebadges{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .scorebadges:not(:has(*)){display:none}
@@ -875,7 +875,7 @@ a.lklink{display:flex;text-decoration:none}
   </div>
 </div>
 
-<div id="imgZoom" hidden><img id="zoomImg" alt=""></div>
+<div id="imgZoom" hidden role="dialog" aria-modal="true" aria-label="Full-screen photo" tabindex="-1"><img id="zoomImg" alt=""></div>
 
 <div id="toast" role="status" aria-live="polite"></div>
 <script>
@@ -903,9 +903,9 @@ function setOn(el, on, current) {
 }
 /* Only the top open layer can be reached by Tab and assistive tech (aria-modal alone doesn't stop Tab): header, list
    and nav go inert under any of them, and so does an open layer under another one. Top first, as they stack: the
-   in-app camera, the photo picker, the setup screen, the photo chooser, the product sheet. Each one calls this after
-   it shows or hides. */
-const LAYERS = ['#cam', '#picker', '#lock', '#imgChooser', '#sheet'];
+   in-app camera, the photo picker, the full-screen photo, the setup screen, the photo chooser, the product sheet.
+   Each one calls this after it shows or hides. */
+const LAYERS = ['#cam', '#picker', '#imgZoom', '#lock', '#imgChooser', '#sheet'];
 const layerOpen = sel => sel === '#sheet' ? $('#sheet').classList.contains('open') : !$(sel).hidden;
 function updateInert() {
   const top = LAYERS.find(layerOpen) || null;
@@ -2613,9 +2613,32 @@ async function bestCurrentBlob(it) {
   }
   return null;
 }
+/* The full-screen photo is a layer too (over a product sheet or the photo chooser): what it covers goes inert, so Tab
+   and Enter can't work a button under it unseen. Focus moves to it, and goes back where it was when a tap or Escape
+   closes it. A photo opened by a tap leaves nothing to go back to, and what it left can end up under another layer
+   (the chooser or the setup screen can open under the photo): then focus goes to the title of the layer on top, as
+   when that layer opens */
+let zoomReturn = null;
 function zoomImage(src) {
   $('#zoomImg').src = src;
+  if ($('#imgZoom').hidden) { const ae = document.activeElement; zoomReturn = ae && ae !== document.body ? ae : null; }
   $('#imgZoom').hidden = false;
+  updateInert();
+  $('#imgZoom').focus({ preventScroll: true });
+}
+function closeZoom() {
+  const z = $('#imgZoom'), wasOpen = !z.hidden;
+  z.hidden = true; $('#zoomImg').src = '';
+  if (!wasOpen) return;
+  updateInert();
+  const to = zoomReturn; zoomReturn = null;
+  const top = LAYERS.find(layerOpen);
+  if (isShown(to) && (!top || $(top).contains(to))) to.focus({ preventScroll: true });
+  else {
+    const t = { '#imgChooser': '#chTitle', '#lock': '#lockTitle', '#sheet': '#dTitle' }[top];
+    if (t && isShown($(t))) $(t).focus({ preventScroll: true });
+    else if (document.activeElement === z) z.blur();
+  }
 }
 let chooserReturn = null;                    // where focus was when the chooser opened: it goes back there
 async function openChooser(id) {
@@ -2627,7 +2650,10 @@ async function openChooser(id) {
   $('#chImgCur').src = it.thumb || ''; $('#chImgNew').src = it.suggestThumb || '';
   /* a modal dialog, like the picker: what is under it goes inert, focus moves in (to its title, not a button: it opens
      by itself, maybe while someone is typing) and goes back where it was when it closes */
-  if ($('#imgChooser').hidden) { const ae = document.activeElement; chooserReturn = ae && ae !== document.body ? ae : null; }
+  if ($('#imgChooser').hidden) {             // opened under the full-screen photo: it goes back where the photo would have
+    const ae = document.activeElement === $('#imgZoom') ? zoomReturn : document.activeElement;
+    chooserReturn = ae && ae !== document.body ? ae : null;
+  }
   $('#imgChooser').hidden = false;
   document.body.style.overflow = 'hidden';
   updateInert();
@@ -2809,6 +2835,18 @@ function showLockStep(step, msg) {
     $('#ownErr').textContent = '';
     if (!$('#ownName').value) { try { $('#ownName').value = localStorage.getItem('fcOwnName') || ''; } catch (e) {} }
   }
+  lockStepFocus(step);
+}
+/* A step's own buttons ("I was invited", Back) hide the step they sit in, which drops focus on the page: the next Tab
+   starts again from the top and a screen reader hears nothing. Focus moves into the new step instead, without
+   scrolling: the title for the first steps (as when the screen opens), the first control for the key step. The
+   password step focuses its field itself (above). Focus that is somewhere else is left there */
+function lockStepFocus(step) {
+  if ($('#lock').hidden || step === 'pw') return;
+  const ae = document.activeElement;
+  if (ae && ae !== document.body && ![...document.querySelectorAll('#lock .lkstep')].some(s => s.hidden && s.contains(ae))) return;
+  const to = step === 'inv' ? $('#invMake') : $('#lockTitle');
+  if (isShown(to)) to.focus({ preventScroll: true });
 }
 
 /* ---- invited person joins with their own classic GitHub key ----------------
@@ -3394,7 +3432,7 @@ function bindEvents() {
   };
   $('#chImgCur').onclick = e => zoomImage(e.target.src);
   $('#chImgNew').onclick = e => zoomImage(e.target.src);
-  $('#imgZoom').onclick = () => { $('#imgZoom').hidden = true; $('#zoomImg').src = ''; };
+  $('#imgZoom').onclick = closeZoom;
   $('#chKeep').onclick = async () => {
     const it = items.find(i => i.id === chooserId);
     closeChooser();
