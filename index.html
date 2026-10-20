@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f4f5f1" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0e1210" media="(prefers-color-scheme: dark)">
 <title>FoodCheck</title>
@@ -59,13 +59,14 @@
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
   font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
   font-size:var(--t-base);line-height:1.45;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
-  touch-action:pan-x pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+  touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}   /* pinch-zoom allowed (WCAG 1.4.4); only double-tap zoom is off */
 img{display:block;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 button:active{transform:scale(.98)}
 input:focus,textarea:focus,select:focus{outline:none}
-:focus-visible{outline:2px solid var(--brand-fg);outline-offset:2px}
+:focus-visible,select:focus-visible{outline:2px solid var(--brand-fg);outline-offset:2px}   /* the sort menu has no focus style of its own */
+.vh{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
 b,strong{font-weight:600}
 .i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 
@@ -119,6 +120,7 @@ main{max-width:860px;margin:0 auto;
   background:none;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;gap:5px;
   font-size:var(--t-md);font-weight:600;white-space:nowrap;transition:color .15s}
 .chip::before{content:'';position:absolute;inset:4px;z-index:-1;border-radius:10px;background:var(--seg-on);
+  border:1px solid var(--faint);   /* an outline on the selected pill, so selection isn't shown by colour alone */
   box-shadow:0 1px 2px rgba(23,32,26,.1),0 2px 8px rgba(23,32,26,.06);opacity:0;transform:scale(.94);
   transition:opacity .15s,transform .15s}
 .chip.on{color:var(--text)}
@@ -145,7 +147,8 @@ main{max-width:860px;margin:0 auto;
 #cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(150px,40vw),1fr));gap:12px}
 .card{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto auto 1fr;
   align-items:center;padding:6px;border:1px solid var(--line);border-radius:20px;background:var(--surface);
-  box-shadow:var(--shadow-sm);cursor:pointer;-webkit-user-select:none;user-select:none;transition:transform .12s ease}
+  box-shadow:var(--shadow-sm);cursor:pointer;-webkit-user-select:none;user-select:none;transition:transform .12s ease;
+  width:100%;min-width:0;margin:0;color:var(--text);text-align:left}   /* a <button>, so it can be reached and opened by keyboard */
 .card:active{transform:scale(.975)}
 .card .ph,.card .noph{grid-column:1/-1;grid-row:1;width:100%;aspect-ratio:1/1;border-radius:14px;background:var(--surface-2)}
 .card .ph{object-fit:cover}
@@ -170,7 +173,7 @@ main{max-width:860px;margin:0 auto;
 .card .info{grid-column:1/-1;grid-row:3;align-self:stretch;display:flex;flex-direction:column;gap:2px;padding:6px 6px 4px}
 .card .nm{font-size:15px;font-weight:600;line-height:1.3;letter-spacing:-.01em;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.card .br{font-size:var(--t-sm);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .br{display:block;font-size:var(--t-sm);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stars{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 6px;margin-top:auto;padding-top:10px;
   font-size:12.5px;line-height:1;color:var(--faint)}
 .stars .sglyph{flex:none;letter-spacing:1px}
@@ -186,9 +189,9 @@ main{max-width:860px;margin:0 auto;
 
 /* ---- cards & forms ---- */
 .formcard{margin-bottom:14px;padding:16px;border:1px solid var(--line);border-radius:22px;background:var(--surface);box-shadow:var(--shadow-sm)}
-.formcard h3{margin:0 0 12px;font-size:var(--t-base);font-weight:700;letter-spacing:-.01em;color:var(--text)}
+.formcard h2,.formcard h3{margin:0 0 12px;font-size:var(--t-base);font-weight:700;letter-spacing:-.01em;color:var(--text)}
 .cardhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
-.cardhead h3{margin:0}
+.cardhead h2,.cardhead h3{margin:0}
 .tag{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:999px;
   background:var(--surface-2);color:var(--muted);font-size:var(--t-xs);font-weight:600;white-space:nowrap}
 .tag .i{width:14px;height:14px}
@@ -216,7 +219,8 @@ main{max-width:860px;margin:0 auto;
 /* photo slots */
 .photobtns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .photobtns.three{grid-template-columns:repeat(3,1fr)}
-.photobtn{position:relative;overflow:hidden;min-height:122px;padding:14px 6px 12px;border:1.5px dashed var(--line-strong);border-radius:18px;
+.photoslot{position:relative;display:flex;min-width:0}   /* holds the slot's button and, once a photo is in, its ✕ (a sibling: buttons can't nest) */
+.photobtn{position:relative;overflow:hidden;flex:1;min-width:0;width:100%;margin:0;min-height:122px;padding:14px 6px 12px;border:1.5px dashed var(--line-strong);border-radius:18px;
   background:var(--surface-2);color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
   text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
 .photobtn:active{transform:scale(.97)}
@@ -227,10 +231,10 @@ main{max-width:860px;margin:0 auto;
 .photobtn .sub{font-size:var(--t-xs);color:var(--muted)}
 .photobtn img.prev{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .photobtn:has(img.prev){border-style:solid;border-color:transparent}
-.photobtn .clear{position:absolute;top:7px;right:7px;z-index:2;display:grid;place-items:center;width:30px;height:30px;
+.photoslot .clear{position:absolute;top:7px;right:7px;z-index:2;display:grid;place-items:center;width:30px;height:30px;
   border:0;border-radius:50%;background:rgba(12,16,14,.62);color:#fff;font-size:13px;line-height:1;
   -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
-.photobtn .clear::after{content:'';position:absolute;inset:-7px}
+.photoslot .clear::after{content:'';position:absolute;inset:-7px}
 #rvImgRow{display:flex;gap:8px;margin-bottom:12px}
 #rvImgRow:empty{display:none}
 .rvimg{width:31%;aspect-ratio:1/1;object-fit:cover;border:1px solid var(--line);border-radius:14px;background:var(--surface-2)}
@@ -260,7 +264,7 @@ main{max-width:860px;margin:0 auto;
 .vbtn .vi{width:24px;height:24px;stroke-width:2.4}
 .vbtn .vt{display:flex;flex-direction:column;align-items:flex-start;text-align:left}
 .vbtn .vt b{font-size:var(--t-lg);font-weight:700;line-height:1.1}
-.vbtn .vt small{margin-top:2px;font-size:var(--t-xs);font-weight:500;opacity:.85}
+.vbtn .vt small{margin-top:2px;font-size:var(--t-xs);font-weight:500}
 .verdict.big .vbtn{min-height:66px;justify-content:flex-start;padding:10px 16px}
 .savebar{display:flex;gap:10px;margin-top:4px}
 .savebar .btn{min-height:54px;border-radius:16px;font-size:var(--t-base)}
@@ -289,6 +293,8 @@ main{max-width:860px;margin:0 auto;
 .dthumbs{display:flex;gap:8px;margin-top:10px}
 .dthumbs img{width:64px;height:64px;object-fit:cover;border:1px solid var(--line);border-radius:12px;cursor:pointer}
 .dtitle{margin:16px 0 4px;font-size:var(--t-2xl);font-weight:700;letter-spacing:-.02em;line-height:1.2}
+.dtitle:focus{outline:none}   /* focus lands here when the sheet opens (tabindex=-1, not a control) */
+#detailsH:focus,#cards .empty:focus,#cam:focus,#chTitle:focus,#lockTitle:focus{outline:none}   /* the same for the form Edit opens, an emptied list, the camera, the photo chooser and the setup screen */
 .dbrand{font-size:var(--t-md);color:var(--muted)}
 .scorebadges{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .scorebadges:not(:has(*)){display:none}
@@ -525,6 +531,19 @@ a.lklink{display:flex;text-decoration:none}
 #toast.show{opacity:1;transform:translate(-50%,0) scale(1)}
 
 @media (max-width: 359px){ #syncLbl{display:none} #syncBtn{padding:0 11px} }
+/* Now that pinch-zoom is allowed, iOS zooms the page in when a field under 16px gets focus: on touch screens these get 16px */
+@media (pointer: coarse){ #sortSel,#invKey,#ownKey,#bundleOut{font-size:16px!important}
+  /* the bigger sort text would squeeze the count line beside it onto two lines: the menu's padding, its icons and the gap
+     shrink so the count keeps the room it had at 13px (text still 4-5px clear of the icons) */
+  #sortSel{padding:0 25px 0 29px} .sortwrap .i:first-child{left:8px} .sortwrap .chev{right:6px} .listmeta{gap:4px}
+  /* the invite key's hint in the UI font, so "(starts with ghp_)" still fits on a 320px phone; a typed key stays monospace */
+  #invKey::placeholder{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif} }
+/* forced colours (Windows contrast themes) drop backgrounds and shadows: mark what is selected with a border */
+@media (forced-colors: active){
+  .chip.on::before{border:2px solid Highlight}
+  nav button.on .nico{border:2px solid Highlight}
+  .vbtn.on{border:3px solid Highlight}
+}
 @media (prefers-reduced-motion: reduce){
   #sheet,#overlay,#toast,.card,.chip,.chip::before,.btn,.vbtn{transition:none!important}
   #picker,.pkbox{animation:none}
@@ -562,10 +581,10 @@ a.lklink{display:flex;text-decoration:none}
   <symbol id="i-torch" viewBox="0 0 24 24"><path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><path d="M6 6h12"/><path d="M12 12v1"/></symbol>
 </svg>
 
-<div id="lock" hidden><div class="lockbox">
+<div id="lock" hidden><div class="lockbox" role="dialog" aria-modal="true" aria-labelledby="lockTitle">
   <div class="lockhero">
     <svg class="mark lg" viewBox="0 0 32 32" aria-hidden="true"><rect class="mark-bg" x="1" y="3" width="28" height="28" rx="8.5"/><path class="mark-check" d="M8.6 17.6l4.5 4.5 9.2-10"/><circle class="mark-dot" cx="26.2" cy="5.8" r="5.2"/><path class="mark-x" d="M24.5 4.1l3.4 3.4M27.9 4.1l-3.4 3.4"/></svg>
-    <h2>Welcome to FoodCheck</h2>
+    <h2 id="lockTitle" tabindex="-1">Welcome to FoodCheck</h2>
     <p class="locktag">Your personal good/bad grocery list.</p>
   </div>
 
@@ -576,7 +595,7 @@ a.lklink{display:flex;text-decoration:none}
     <a class="btn ghost lklink" id="ownGetKey" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free AI key ↗</a>
     <p class="lkhint">The key lets a photo fill in the product for you. Without one, barcode lookup and typing still work, and you can add a key later in Settings.</p>
     <button class="btn" id="ownGo">Start</button>
-    <div class="lockerr" id="ownErr"></div>
+    <div class="lockerr" id="ownErr" role="alert"></div>
     <button class="btn ghost sm" id="lkSignIn">Invited or already set up? Sign in</button>
   </div>
 
@@ -591,7 +610,7 @@ a.lklink{display:flex;text-decoration:none}
     <p id="lockmsg">Enter your password to set up this device.</p>
     <input id="lockpw" type="password" autocomplete="current-password" placeholder="Password">
     <button class="btn" id="lockbtn">Unlock</button>
-    <div class="lockerr" id="lockerr"></div>
+    <div class="lockerr" id="lockerr" role="alert"></div>
     <button class="btn ghost sm" id="lockskip">Skip — set up manually</button>
     <button class="btn ghost sm" id="lkPwBack"><svg class="i"><use href="#i-chev-left"/></svg>Back</button>
   </div>
@@ -607,7 +626,7 @@ a.lklink{display:flex;text-decoration:none}
     <a class="btn ghost lklink" id="invMake" href="https://github.com/settings/tokens/new?scopes=repo&amp;description=FoodCheck">Make my key ↗</a>
     <input id="invKey" type="password" placeholder="Your key (starts with ghp_)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
     <button class="btn" id="invGo">📋 Paste key &amp; connect</button>
-    <div class="lockerr" id="invErr"></div>
+    <div class="lockerr" id="invErr" role="alert"></div>
     <button class="btn ghost sm" id="lkInvBack"><svg class="i"><use href="#i-chev-left"/></svg>Back</button>
   </div>
 </div></div>
@@ -623,16 +642,16 @@ a.lklink{display:flex;text-decoration:none}
     <div class="searchrow">
       <label class="searchfield"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input id="searchBox" type="search" placeholder="Search name, brand, notes, barcode…" autocomplete="off" aria-label="Search your list"></label>
     </div>
-    <div class="chips" id="statusChips">
-      <button class="chip on" data-f="all">All</button>
-      <button class="chip good" data-f="good"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Good</button>
-      <button class="chip bad" data-f="bad"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg>Bad</button>
+    <div class="chips" id="statusChips" role="group" aria-label="Verdict">
+      <button type="button" class="chip on" data-f="all" aria-pressed="true">All</button>
+      <button type="button" class="chip good" data-f="good" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>Good</button>
+      <button type="button" class="chip bad" data-f="bad" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg>Bad</button>
     </div>
-    <div class="chips" id="nutChips" aria-label="Nutrition rating">
-      <button class="chip nut on" data-n="0">Any <span class="st">★</span></button>
-      <button class="chip nut" data-n="3">3<span class="st">★</span>+</button>
-      <button class="chip nut" data-n="4">4<span class="st">★</span>+</button>
-      <button class="chip nut" data-n="5">5<span class="st">★</span></button>
+    <div class="chips" id="nutChips" role="group" aria-label="Nutrition rating">
+      <button type="button" class="chip nut on" data-n="0" aria-pressed="true">Any <span class="st">★</span></button>
+      <button type="button" class="chip nut" data-n="3" aria-pressed="false">3<span class="st">★</span>+</button>
+      <button type="button" class="chip nut" data-n="4" aria-pressed="false">4<span class="st">★</span>+</button>
+      <button type="button" class="chip nut" data-n="5" aria-pressed="false">5<span class="st">★</span></button>
     </div>
     <div class="listmeta">
       <div id="countLine"></div>
@@ -648,17 +667,17 @@ a.lklink{display:flex;text-decoration:none}
   <!-- ============ ADD / EDIT ============ -->
   <section id="view-add" hidden>
     <div class="formcard" id="photosCard">
-      <div class="cardhead"><h3>Photos</h3><span class="tag">At least one</span></div>
+      <div class="cardhead"><h2>Photos</h2><span class="tag">At least one</span></div>
       <div class="photobtns three">
-        <div class="photobtn" id="pfBtn"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-box"/></svg></span><span class="lb">Front</span><span class="sub">card image</span></div>
-        <div class="photobtn" id="pbBtn"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-label"/></svg></span><span class="lb">Back / label</span><span class="sub">nutrition</span></div>
-        <div class="photobtn" id="pcBtn"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-barcode"/></svg></span><span class="lb">Barcode</span><span class="sub">exact match</span></div>
+        <div class="photoslot"><button type="button" class="photobtn" id="pfBtn"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-box"/></svg></span><span class="lb">Front</span><span class="sub">card image</span></button></div>
+        <div class="photoslot"><button type="button" class="photobtn" id="pbBtn"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-label"/></svg></span><span class="lb">Back / label</span><span class="sub">nutrition</span></button></div>
+        <div class="photoslot"><button type="button" class="photobtn" id="pcBtn"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-barcode"/></svg></span><span class="lb">Barcode</span><span class="sub">exact match</span></button></div>
       </div>
       <div class="hint">Tap a slot — take a photo, or pick several from your gallery at once. Name and nutrition fill themselves in automatically after you save.</div>
     </div>
 
     <div class="formcard" id="detailsCard" hidden>
-      <h3>Details</h3>
+      <h2 id="detailsH" tabindex="-1">Details</h2>
       <div id="rvImgRow"></div>
       <div class="field"><label for="fName">Name</label><input id="fName"></div>
       <div class="field"><label for="fBrand">Brand</label><input id="fBrand"></div>
@@ -677,10 +696,10 @@ a.lklink{display:flex;text-decoration:none}
     </div>
 
     <div class="formcard">
-      <h3>Verdict</h3>
+      <h2>Verdict</h2>
       <div class="verdict big">
-        <button class="vbtn good" id="vGood"><svg class="i vi" aria-hidden="true"><use href="#i-check"/></svg><span class="vt"><b>Good</b><small>buy again</small></span></button>
-        <button class="vbtn bad" id="vBad"><svg class="i vi" aria-hidden="true"><use href="#i-x"/></svg><span class="vt"><b>Bad</b><small>never again</small></span></button>
+        <button type="button" class="vbtn good" id="vGood" aria-pressed="false"><svg class="i vi" aria-hidden="true"><use href="#i-check"/></svg><span class="vt"><b>Good</b><small>buy again</small></span></button>
+        <button type="button" class="vbtn bad" id="vBad" aria-pressed="false"><svg class="i vi" aria-hidden="true"><use href="#i-x"/></svg><span class="vt"><b>Bad</b><small>never again</small></span></button>
       </div>
       <div class="field" style="margin-top:14px"><label for="fNotes">Notes (optional)</label><textarea id="fNotes" placeholder="Why good/bad? Taste, price…"></textarea></div>
     </div>
@@ -694,10 +713,10 @@ a.lklink{display:flex;text-decoration:none}
   <!-- ============ QUICK CHECK (nothing saved) ============ -->
   <section id="view-check" hidden>
     <div class="formcard" id="qInputCard">
-      <div class="cardhead"><h3>Quick check</h3><span class="tag">Nothing gets saved</span></div>
+      <div class="cardhead"><h2>Quick check</h2><span class="tag">Nothing gets saved</span></div>
       <div class="photobtns">
-        <div class="photobtn" id="qfBtn"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-box"/></svg></span><span class="lb">Front</span><span class="sub">package</span></div>
-        <div class="photobtn" id="qcBtn"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-barcode"/></svg></span><span class="lb">Barcode / label</span><span class="sub">most accurate</span></div>
+        <div class="photoslot"><button type="button" class="photobtn" id="qfBtn"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-box"/></svg></span><span class="lb">Front</span><span class="sub">package</span></button></div>
+        <div class="photoslot"><button type="button" class="photobtn" id="qcBtn"><span class="ico"><svg class="i" aria-hidden="true"><use href="#i-barcode"/></svg></span><span class="lb">Barcode / label</span><span class="sub">most accurate</span></button></div>
       </div>
       <div class="field" style="margin-top:14px"><label for="qBarcode">Or type the barcode number</label>
         <input id="qBarcode" inputmode="numeric" autocomplete="off" placeholder="8850001234567"></div>
@@ -799,17 +818,17 @@ a.lklink{display:flex;text-decoration:none}
 
 <!-- ============ DETAIL SHEET ============ -->
 <div id="overlay"></div>
-<div id="sheet"><button id="sheetClose" aria-label="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button><div class="grab"></div><div id="sheetBody"></div></div>
+<div id="sheet" role="dialog" aria-modal="true" aria-labelledby="dTitle"><button id="sheetClose" aria-label="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button><div class="grab"></div><div id="sheetBody"></div></div>
 
 <nav>
-  <button id="navList" class="on"><span class="nico"><svg class="i" aria-hidden="true"><use href="#i-list"/></svg></span><span class="nlb">List</span></button>
+  <button id="navList" class="on" aria-current="page"><span class="nico"><svg class="i" aria-hidden="true"><use href="#i-list"/></svg></span><span class="nlb">List</span></button>
   <button id="navCheck"><span class="nico"><svg class="i" aria-hidden="true"><use href="#i-check-search"/></svg></span><span class="nlb">Check</span></button>
   <button id="navAdd" class="addbig"><span class="nico"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></span><span class="nlb">Add</span></button>
   <button id="navSettings"><span class="nico"><svg class="i" aria-hidden="true"><use href="#i-sliders"/></svg></span><span class="nlb">Settings</span></button>
 </nav>
 
-<div id="imgChooser" hidden><div class="chbox">
-  <h3 class="chtitle">Pick the better photo</h3>
+<div id="imgChooser" hidden><div class="chbox" role="dialog" aria-modal="true" aria-labelledby="chTitle" aria-describedby="chName">
+  <h2 class="chtitle" id="chTitle" tabindex="-1">Pick the better photo</h2>
   <div class="hint" id="chName" style="margin-top:0"></div>
   <div class="cmpstack">
     <div class="cmprow"><div class="cmplbl"><svg class="i" aria-hidden="true"><use href="#i-camera"/></svg>Your photo</div><img id="chImgCur" alt="" data-side="cur"><span class="tapzoom">tap to enlarge</span></div>
@@ -827,7 +846,7 @@ a.lklink{display:flex;text-decoration:none}
 <input type="file" accept="image/*" capture="environment" id="camIn" hidden>
 <input type="file" accept="image/*" multiple id="galIn" hidden>
 
-<div id="picker" hidden><div class="pkbox">
+<div id="picker" hidden><div class="pkbox" role="dialog" aria-modal="true" aria-labelledby="pkTitle">
   <div class="pkgrab"></div>
   <div class="pktitle" id="pkTitle">Add a photo</div>
   <button class="pkopt" id="pkCam"><span class="pkico"><svg class="i" aria-hidden="true"><use href="#i-camera"/></svg></span><span class="pktx"><b>Take a photo</b><i>Opens the camera</i></span><svg class="i chev" aria-hidden="true"><use href="#i-chev-right"/></svg></button>
@@ -836,7 +855,7 @@ a.lklink{display:flex;text-decoration:none}
 </div></div>
 
 <!-- in-app camera (Android): always opens the back lens -->
-<div id="cam" hidden>
+<div id="cam" hidden role="dialog" aria-modal="true" aria-labelledby="camStep camSlot" tabindex="-1">
   <video id="camVideo" playsinline muted autoplay></video>
   <div class="camflash" id="camFlash"></div>
   <div class="camtop">
@@ -846,7 +865,7 @@ a.lklink{display:flex;text-decoration:none}
     <div class="sp" id="camTorchSp"></div>
   </div>
   <div class="camerr" id="camErr" hidden>
-    <div id="camErrMsg"></div>
+    <div id="camErrMsg" role="alert"></div>
     <button class="camdone" id="camFallback">Use the phone’s camera app</button>
   </div>
   <div class="cambottom">
@@ -858,7 +877,7 @@ a.lklink{display:flex;text-decoration:none}
 
 <div id="imgZoom" hidden><img id="zoomImg" alt=""></div>
 
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 <script>
 /* =================================================================
    FoodCheck — single-file grocery good/bad database
@@ -875,6 +894,38 @@ const uid = () => ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto
   : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
 const num = v => (v === undefined || v === null || v === '' || isNaN(+v)) ? null : +v;
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+/* a toggle's look (.on) and what assistive tech is told (aria-pressed, or aria-current for the nav) change together */
+function setOn(el, on, current) {
+  if (!el) return;
+  el.classList.toggle('on', !!on);
+  if (current) { if (on) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); }
+  else el.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+/* Only the top open layer can be reached by Tab and assistive tech (aria-modal alone doesn't stop Tab): header, list
+   and nav go inert under any of them, and so does an open layer under another one. Top first, as they stack: the
+   in-app camera, the photo picker, the setup screen, the photo chooser, the product sheet. Each one calls this after
+   it shows or hides. */
+const LAYERS = ['#cam', '#picker', '#lock', '#imgChooser', '#sheet'];
+const layerOpen = sel => sel === '#sheet' ? $('#sheet').classList.contains('open') : !$(sel).hidden;
+function updateInert() {
+  const top = LAYERS.find(layerOpen) || null;
+  for (const sel of ['header', 'main', 'nav']) { const el = $(sel); if (el) el.toggleAttribute('inert', !!top); }
+  for (const sel of LAYERS) { const el = $(sel); if (el) el.toggleAttribute('inert', sel !== top && layerOpen(sel)); }
+}
+const isShown = el => !!(el && el.isConnected && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
+/* Focus goes back without moving the page: closing a sheet or dialog never scrolls the list under a finger or a mouse.
+   Only when the focus ring shows (a keyboard user) is the list scrolled, and only so far that the ring can be seen:
+   to a stand-in (a neighbour card, the empty-list message) whenever it is cut off, to the control that opened the
+   dialog only when it is entirely out of sight (under the header or the nav counts as out of sight). */
+function focusNoScroll(el, standIn) {
+  el.focus({ preventScroll: true });
+  let ring = false; try { ring = el.matches(':focus-visible'); } catch (e) {}
+  if (!ring || document.activeElement !== el) return;
+  const r = el.getBoundingClientRect(), h = $('header'), n = $('nav');
+  const top = h && isShown(h) ? h.getBoundingClientRect().bottom : 0;
+  const bottom = n && isShown(n) ? n.getBoundingClientRect().top : innerHeight;
+  if (standIn || r.bottom <= top || r.top >= bottom) el.scrollIntoView({ block: 'nearest' });
+}
 
 let toastT;
 function toast(msg, ms = 2600) {
@@ -1147,10 +1198,10 @@ function mergeItems(local, remote) {
 const views = { list: '#view-list', add: '#view-add', check: '#view-check', settings: '#view-settings' };
 function showView(name) {
   for (const [k, sel] of Object.entries(views)) $(sel).hidden = (k !== name);
-  $('#navList').classList.toggle('on', name === 'list');
-  $('#navCheck').classList.toggle('on', name === 'check');
-  $('#navAdd').classList.toggle('on', name === 'add');
-  $('#navSettings').classList.toggle('on', name === 'settings');
+  setOn($('#navList'), name === 'list', true);
+  setOn($('#navCheck'), name === 'check', true);
+  setOn($('#navAdd'), name === 'add', true);
+  setOn($('#navSettings'), name === 'settings', true);
   window.scrollTo(0, 0);
   if (name === 'list') renderList();
   if (name === 'settings') renderSettings();
@@ -1192,33 +1243,41 @@ function renderList() {
 
   const wrap = $('#cards');
   if (!list.length) {
-    wrap.innerHTML = `<div class="empty" style="grid-column:1/-1">${
+    wrap.innerHTML = `<div class="empty" style="grid-column:1/-1" tabindex="-1">${
       live().length ? 'No items match.' :
       'No items yet.<br>Tap <b>＋ Add</b>, snap a photo, mark it good or bad.'}</div>`;
     return;
   }
-  wrap.innerHTML = list.map(it => `
-    <div class="card" data-id="${esc(it.id)}">
+  /* Background work (sync, identifying, photo search) re-renders the list often: a keyboard user on a card stays on it */
+  const ae = document.activeElement;
+  const focusId = ae && wrap.contains(ae) && ae.classList.contains('card') ? ae.dataset.id : null;
+  /* Each card is a <button> (keyboard: Tab, then Enter or Space). Its spoken name is "name brand, Good, 4 of 5 stars":
+     the name comes first in the markup (the grid places every part, so the order on screen is unchanged), and the
+     glyph-only parts (badge, stars, P/F figures, Nutri-Score letter) are hidden from it, said once in words instead. */
+  wrap.innerHTML = list.map(it => { const st = deriveStatus(it), r = nutriRate(it); return `
+    <button type="button" class="card" data-id="${esc(it.id)}">
+      <span class="info">
+        <span class="nm">${esc(it.name) || '(no name)'}<span class="vh">,</span></span>
+        <span class="br">${esc(it.brand || '')}${it.brand ? '<span class="vh">,</span>' : ''}</span>
+        <span class="vh">${st === 'good' ? 'Good' : 'Bad'}${r ? ', ' + r.stars + ' of 5 stars' : ','}</span>
+        ${r
+          ? `<span class="stars s${r.stars}" aria-hidden="true"><span class="sglyph">${starStr(r.stars)}</span><span class="ppc">${r.ppc != null ? r.ppc + ' P' : ''}${r.ppc != null && r.fpc ? ' · ' : ''}${r.fpc ? r.fpc + ' F' : ''}</span></span>`
+          : '<span class="stars none"><span class="sglyph" aria-hidden="true">☆☆☆☆☆</span><span class="ppc">no data</span></span>'}
+      </span>
       ${it.thumb ? `<img class="ph" src="${esc(it.thumb)}" alt="" loading="lazy">`
-                 : `<div class="noph">${deriveStatus(it) === 'bad' ? '✕' : '🛒'}</div>`}
-      <span class="badge ${deriveStatus(it)}">${deriveStatus(it) === 'good' ? '✓ Good' : '✕ Bad'}</span>
+                 : `<span class="noph" aria-hidden="true">${st === 'bad' ? '✕' : '🛒'}</span>`}
+      <span class="badge ${st}" aria-hidden="true">${st === 'good' ? '✓ Good' : '✕ Bad'}</span>
       ${disagrees(it) ? '<span class="disagree" title="You two disagree">⚡ split</span>' : ''}
       ${it.pending && it.lastAiErr === AI_PAUSED_MSG && aiPausedUntil > Date.now() ? '<span class="pendchip">⏸ AI paused</span>'
         : it.pending ? '<span class="pendchip">🤖 identifying…</span>'
         : (it.aiFailed && !it.name) ? '<span class="pendchip fail">⚠️ tap to retry</span>'
         : dupPartner(it) ? '<span class="pendchip dup">⚠️ duplicate</span>' : ''}
       ${it.nutriscore && NS_COLORS[it.nutriscore] ?
-        `<span class="nscore" style="background:${NS_COLORS[it.nutriscore]}">${esc(it.nutriscore)}</span>` : ''}
-      <div class="info">
-        <div class="nm">${esc(it.name) || '(no name)'}</div>
-        <div class="br">${esc(it.brand || '')}</div>
-        ${(() => { const r = nutriRate(it); return r
-          ? `<div class="stars s${r.stars}"><span class="sglyph">${starStr(r.stars)}</span><span class="ppc">${r.ppc != null ? r.ppc + ' P' : ''}${r.ppc != null && r.fpc ? ' · ' : ''}${r.fpc ? r.fpc + ' F' : ''}</span></div>`
-          : '<div class="stars none"><span class="sglyph">☆☆☆☆☆</span><span class="ppc">no data</span></div>'; })()}
-      </div>
-    </div>`).join('');
+        `<span class="nscore" style="background:${NS_COLORS[it.nutriscore]}" aria-hidden="true">${esc(it.nutriscore)}</span>` : ''}
+    </button>`; }).join('');
   wrap.querySelectorAll('.card').forEach(c =>
     c.addEventListener('click', () => openDetail(c.dataset.id)));
+  if (focusId) { const again = [...wrap.querySelectorAll('.card')].find(c => c.dataset.id === focusId); if (again) again.focus({ preventScroll: true }); }
 }
 
 /* ---------------- detail sheet ---------------- */
@@ -1266,17 +1325,23 @@ async function openDetail(id) {
   openDetailId = id;
   const myToken = ++detailToken;   // abandon image work from a previous open
   const nutRows = nutriRowsHTML(it);
+  /* the sheet is a modal dialog: focus moves in, stays in (the page behind goes inert) and comes back on close.
+     A re-render while it is open (Good/Bad, Identify again) keeps the focus on the same control. */
+  const sheet = $('#sheet'), wasOpen = sheet.classList.contains('open'), ae = document.activeElement;
+  const keepFocus = wasOpen && ae && ae.id && sheet.contains(ae) ? ae.id : null;
+  if (!wasOpen) sheetReturn = { id, el: ae && ae !== document.body ? ae : null,
+                                index: [...document.querySelectorAll('#cards .card')].indexOf(ae) };
   $('#sheetBody').innerHTML = `
     <div id="dImgWrap"></div>
-    <div class="dtitle">${esc(it.name) || '(no name)'}</div>
+    <div class="dtitle" id="dTitle" tabindex="-1">${esc(it.name) || '(no name)'}</div>
     <div class="dbrand">${esc([it.brand, it.category, it.quantity].filter(Boolean).join(' · '))}</div>
     <div class="scorebadges">
       ${it.nutriscore && NS_COLORS[it.nutriscore] ? `<span class="scorepill" style="background:${NS_COLORS[it.nutriscore]}">Nutri-Score ${esc(it.nutriscore)}</span>` : ''}
       ${it.nova ? `<span class="scorepill" style="background:#6b7280">NOVA ${esc(it.nova)}</span>` : ''}
     </div>
     <div class="dtoggles">
-      <button class="vbtn good ${deriveStatus(it) === 'good' ? 'on' : ''}" id="dGood">✓ Good</button>
-      <button class="vbtn bad ${deriveStatus(it) === 'bad' ? 'on' : ''}" id="dBad">✕ Bad</button>
+      <button class="vbtn good ${deriveStatus(it) === 'good' ? 'on' : ''}" id="dGood" aria-pressed="${deriveStatus(it) === 'good'}">✓ Good</button>
+      <button class="vbtn bad ${deriveStatus(it) === 'bad' ? 'on' : ''}" id="dBad" aria-pressed="${deriveStatus(it) === 'bad'}">✕ Bad</button>
     </div>
     ${(() => { const all = verdictEntries(it); if (!all.length) return '';
       const lbl = v => v === 'good' ? '✓ good' : '✕ bad';
@@ -1294,8 +1359,12 @@ async function openDetail(id) {
       <button class="btn ghost" id="dEdit">Edit</button>
       <button class="btn danger" id="dDelete">Delete</button>
     </div>`;
-  $('#overlay').classList.add('open'); $('#sheet').classList.add('open');
+  $('#overlay').classList.add('open'); sheet.classList.add('open');
   document.body.style.overflow = 'hidden';
+  updateInert();
+  const again = keepFocus && document.getElementById(keepFocus);
+  if (again && !again.disabled) again.focus({ preventScroll: true });
+  else if (!sheet.contains(document.activeElement)) $('#dTitle').focus({ preventScroll: true });
 
   const wrap = $('#dImgWrap');
   const imgsMeta = it.imgs || (it.hasImage ? { f: 1 } : {});
@@ -1305,12 +1374,12 @@ async function openDetail(id) {
     const url = URL.createObjectURL(blob);
     const hero = wrap.querySelector('.dimg');
     if (!hero) {
-      const img = document.createElement('img'); img.className = 'dimg'; img.src = url;
+      const img = document.createElement('img'); img.className = 'dimg'; img.src = url; img.alt = it.name || '';
       img.onclick = () => zoomImage(img.src);            // tap big photo -> full screen
       wrap.insertBefore(img, thumbsRow);
     } else {
       thumbsRow.hidden = false;
-      const img = document.createElement('img'); img.src = url;
+      const img = document.createElement('img'); img.src = url; img.alt = '';
       img.onclick = () => {                              // tap thumb -> swap into the big slot
         const h = wrap.querySelector('.dimg');
         const tmp = h.src; h.src = img.src; img.src = tmp;
@@ -1333,7 +1402,7 @@ async function openDetail(id) {
   }
   if (myToken !== detailToken) return;
   if (!wrap.querySelector('.dimg') && it.thumb) {
-    const img = document.createElement('img'); img.className = 'dimg'; img.src = it.thumb;
+    const img = document.createElement('img'); img.className = 'dimg'; img.src = it.thumb; img.alt = it.name || '';
     img.onclick = () => zoomImage(img.src);
     wrap.insertBefore(img, thumbsRow);
   }
@@ -1344,7 +1413,7 @@ async function openDetail(id) {
     it.deletedAt = Date.now(); it.updatedAt = Date.now();
     await dbPutItem(clean(it));
     for (const s of SLOTS) await dbDelImage(it.id + '-' + s).catch(() => {});
-    closeSheet(); renderList(); toast('Duplicate deleted'); queueSync();
+    renderList(); closeSheet(); toast('Duplicate deleted'); queueSync();   // list first, so focus lands on a card that stays
   };
   const idBtn = $('#dIdentify');
   if (idBtn) idBtn.onclick = async () => {
@@ -1364,20 +1433,35 @@ async function openDetail(id) {
   };
   $('#dGood').onclick = () => setStatus(it.id, 'good');
   $('#dBad').onclick = () => setStatus(it.id, 'bad');
-  $('#dEdit').onclick = () => { closeSheet(); startEdit(it.id); };
+  $('#dEdit').onclick = () => { closeSheet(false); startEdit(it.id); };
   $('#dDelete').onclick = async () => {
     if (!confirm(`Delete "${it.name || 'item'}"?`)) return;
     it.deletedAt = Date.now(); it.updatedAt = Date.now();
     await dbPutItem(clean(it));
     for (const s of SLOTS) await dbDelImage(it.id + '-' + s).catch(() => {});
     await dbDelImage(it.id).catch(() => {});
-    closeSheet(); renderList(); toast('Deleted'); queueSync();
+    renderList(); closeSheet(); toast('Deleted'); queueSync();
   };
 }
-function closeSheet() {
-  $('#overlay').classList.remove('open'); $('#sheet').classList.remove('open');
+let sheetReturn = null;                     // {id, el, index}: where focus goes back to when the sheet closes
+function closeSheet(restoreFocus = true) {
+  const sheet = $('#sheet'), wasOpen = sheet.classList.contains('open');
+  $('#overlay').classList.remove('open'); sheet.classList.remove('open');
   document.body.style.overflow = '';
   openDetailId = null;
+  if (!wasOpen) return;
+  updateInert();
+  const r = sheetReturn; sheetReturn = null;
+  let to = null, standIn = false;
+  if (r && restoreFocus) {                  // the card that opened it (found again by id: the list re-renders), else its neighbour
+    const cards = [...document.querySelectorAll('#cards .card')];
+    to = cards.find(c => c.dataset.id === r.id) || null;
+    if (!to && r.index >= 0 && cards.length) { standIn = true; to = cards[Math.min(r.index, cards.length - 1)]; }
+    if (!to) to = r.el;
+    if (!isShown(to)) { standIn = true; to = document.querySelector('#cards .empty'); }   // the last card went: the list's message ("No items match.")
+  }
+  if (isShown(to)) focusNoScroll(to, standIn);
+  else if (sheet.contains(document.activeElement)) document.activeElement.blur();
 }
 async function setStatus(id, st) {
   const it = items.find(i => i.id === id); if (!it) return;
@@ -1470,7 +1554,7 @@ function resetForm() {
   ['#fName', '#fBrand', '#fCat', '#fNotes',
    '#nKcal', '#nFat', '#nSatfat', '#nCarbs', '#nSugars', '#nFiber', '#nProtein', '#nSalt']
     .forEach(s => { const el = $(s); if (el) el.value = ''; });
-  $('#vGood').classList.remove('on'); $('#vBad').classList.remove('on');
+  setOn($('#vGood'), false); setOn($('#vBad'), false);
   $('#rvImgRow').innerHTML = '';
   for (const s of SLOTS) setSlotPreview(s, null);
   $('#photosCard').hidden = false;
@@ -1479,12 +1563,13 @@ function resetForm() {
 }
 function paintPreview(btn, dataURL, onClear) {
   if (!btn) return;
-  btn.querySelectorAll('img.prev,.clear').forEach(e => e.remove());
+  const slot = btn.parentNode;               // .photoslot: the ✕ sits next to the slot's button, not inside it
+  slot.querySelectorAll('img.prev,.clear').forEach(e => e.remove());
   if (!dataURL) return;
-  const img = document.createElement('img'); img.className = 'prev'; img.src = dataURL;
-  const x = document.createElement('button'); x.className = 'clear'; x.textContent = '✕';
-  x.onclick = ev => { ev.stopPropagation(); onClear(); };
-  btn.append(img, x);
+  const img = document.createElement('img'); img.className = 'prev'; img.src = dataURL; img.alt = '';
+  const x = document.createElement('button'); x.type = 'button'; x.className = 'clear'; x.textContent = '✕';
+  x.onclick = ev => { ev.stopPropagation(); onClear(); btn.focus(); };
+  btn.append(img); slot.append(x);
 }
 function setSlotPreview(slot, dataURL) {
   paintPreview($(SLOT_BTN[slot]), dataURL, () => { draft.photos[slot] = null; setSlotPreview(slot, null); });
@@ -1496,13 +1581,28 @@ let pickTarget = null;                                   // {view:'add'|'check',
 const SLOT_TITLE   = { f: 'Front of package', b: 'Back / nutrition label', c: 'Barcode' };
 const Q_SLOT_TITLE = { f: 'Front of package', c: 'Barcode / label' };
 
+let pickerReturn = null;                     // the photo slot the picker opened from: focus goes back there
+let camReturn = null;                        // the same for the in-app camera, which can take the picker's place
 function openPicker(view, slot) {
   pickTarget = { view, slot };
   const titles = view === 'add' ? SLOT_TITLE : Q_SLOT_TITLE;
   $('#pkTitle').textContent = titles[slot] || 'Add a photo';
+  if ($('#picker').hidden) {
+    const ae = document.activeElement;
+    pickerReturn = ae && ae !== document.body ? ae : null;
+  }
   $('#picker').hidden = false;
+  updateInert();
+  $('#pkCam').focus({ preventScroll: true });
 }
-function closePicker() { $('#picker').hidden = true; }
+function closePicker(handOver) {
+  if ($('#picker').hidden) return;
+  $('#picker').hidden = true;
+  const to = pickerReturn; pickerReturn = null;
+  if (handOver === true) { camReturn = to; return; }   // the in-app camera opens in its place: the page stays inert, focus goes there
+  updateInert();
+  if (isShown(to)) to.focus({ preventScroll: true });
+}
 function runPicker(sel) { closePicker(); $(sel).click(); }
 
 /* first file goes to the slot that was tapped, the rest spill into empty slots */
@@ -1588,8 +1688,9 @@ function camLabel() {
 }
 function camError(msg) {
   $('#camErrMsg').textContent = msg;
-  $('#camErr').hidden = false;
+  $('#camErr').hidden = false;              // the message is an alert; focus goes to the way out it offers
   $('#camShot').disabled = true;
+  $('#camFallback').focus({ preventScroll: true });
 }
 async function openCamera() {
   const t = pickTarget;
@@ -1604,8 +1705,13 @@ async function openCamera() {
   $('#camShot').disabled = true;
   $('#camTorch').hidden = true; $('#camTorchSp').hidden = false; $('#camTorch').classList.remove('on');
   camLabel();
+  /* the camera is a modal dialog over the page: the page goes inert, focus moves in (to the dialog, named by its
+     slot, until the shutter can be used) and comes back to the photo slot when it closes */
+  if ($('#cam').hidden && !camReturn) { const ae = document.activeElement; camReturn = ae && ae !== document.body ? ae : null; }
   $('#cam').hidden = false;
+  updateInert();
   document.body.style.overflow = 'hidden';
+  $('#cam').focus({ preventScroll: true });
   let st;
   try {
     st = await pickMainBackCamera(await startCamera());
@@ -1627,6 +1733,7 @@ async function openCamera() {
   if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous'))
     track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
   $('#camShot').disabled = false;
+  if (document.activeElement === $('#cam')) $('#camShot').focus({ preventScroll: true });
 }
 function stopCamStream() {
   if (camStream) camStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
@@ -1634,12 +1741,17 @@ function stopCamStream() {
   const v = $('#camVideo'); if (v) v.srcObject = null;
 }
 function closeCamera() {
+  const wasOpen = !$('#cam').hidden;
   camGen++;
   stopCamStream();
   camTorchOn = false;
   $('#cam').hidden = true;
   $('#camErr').hidden = true;
   document.body.style.overflow = '';
+  if (!wasOpen) return;
+  updateInert();
+  const to = camReturn; camReturn = null;
+  if (isShown(to)) to.focus({ preventScroll: true });
 }
 async function toggleTorch() {
   if (!camStream) return;
@@ -1679,11 +1791,13 @@ async function camShoot() {
   } finally {
     camBusy = false;
     if (camStream) $('#camShot').disabled = false;
+    /* the shutter is disabled while it saves, which drops a keyboard user's focus: it goes back for the next photo */
+    if (camStream && !$('#cam').hidden && !$('#cam').contains(document.activeElement)) $('#camShot').focus({ preventScroll: true });
   }
 }
 function takePhoto() {
-  closePicker();
-  if (useInAppCamera()) openCamera(); else $('#camIn').click();
+  if (useInAppCamera() && pickTarget) { closePicker(true); openCamera(); }
+  else { closePicker(); $('#camIn').click(); }
 }
 
 async function onSlotFile(slot, file, quiet) {
@@ -1715,13 +1829,14 @@ function startEdit(id) {
   $('#fName').value = it.name || ''; $('#fBrand').value = it.brand || '';
   $('#fCat').value = it.category || ''; $('#fNotes').value = it.notes || '';
   fillNutrition(it.nutrition);
-  $('#vGood').classList.toggle('on', deriveStatus(it) === 'good');
-  $('#vBad').classList.toggle('on', deriveStatus(it) === 'bad');
+  setOn($('#vGood'), deriveStatus(it) === 'good');
+  setOn($('#vBad'), deriveStatus(it) === 'bad');
   $('#photosCard').hidden = true;
   $('#detailsCard').hidden = false;
   $('#rvImgRow').innerHTML = it.thumb ? `<img class="rvimg" src="${esc(it.thumb)}" alt="">` : '';
   $('#saveBtn').textContent = 'Save changes';
   showView('add');
+  $('#detailsH').focus({ preventScroll: true });   // the sheet that held focus is gone: the form it opened takes it
 }
 let savingNow = false;
 async function saveForm() {
@@ -2232,6 +2347,7 @@ async function runCheck() {
     }
     qResult = await identifyNoSave(photos, typed, step);
     renderCheckResult();
+    focusCheckResult(true);
     const box = $('#qResult');
     if (box.firstElementChild) box.firstElementChild.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) {
@@ -2243,6 +2359,11 @@ async function runCheck() {
   }
 }
 
+/* after a check, keyboard and screen-reader users land on the verdict instead of a button that scrolled away */
+function focusCheckResult(preventScroll) {
+  const b = document.querySelector('#qResult .qbanner');
+  if (b) b.focus({ preventScroll: !!preventScroll });
+}
 const QM_FIELDS = [['kcal', 'Calories (kcal)'], ['protein', 'Protein (g)'], ['fiber', 'Fiber (g)'],
                    ['sugars', 'Sugars (g)'], ['satfat', 'Saturated fat (g)'], ['salt', 'Salt (g)']];
 
@@ -2263,13 +2384,13 @@ function renderCheckResult() {
     <div class="qsavewrap">
       <div class="hint" style="margin-top:0">Type what the label says (per 100 g) and it rates instantly — still nothing saved.</div>
       <div class="nutgrid" style="margin-top:10px">
-        ${QM_FIELDS.map(([k, lb]) => `<div class="field"><label>${lb}</label><input id="qm_${k}" type="number" step="any" inputmode="decimal" value="${(it.nutrition && it.nutrition[k] != null) ? it.nutrition[k] : ''}"></div>`).join('')}
+        ${QM_FIELDS.map(([k, lb]) => `<div class="field"><label for="qm_${k}">${lb}</label><input id="qm_${k}" type="number" step="any" inputmode="decimal" value="${(it.nutrition && it.nutrition[k] != null) ? it.nutrition[k] : ''}"></div>`).join('')}
       </div>
       <button class="btn sm" id="qmApply" style="margin-top:12px;width:100%">Rate these numbers</button>
     </div>`;
   box.innerHTML = `
     <div class="formcard">
-      <div class="qbanner ${v ? v.cls : 'none'}">
+      <div class="qbanner ${v ? v.cls : 'none'}" tabindex="-1">
         <div class="qstars">${r ? starStr(r.stars) : '☆☆☆☆☆'}</div>
         <div class="qword">${v ? esc(v.word) : 'Not enough to judge'}</div>
         <div class="qsub">${v ? esc(v.sub) : 'Needs calories plus protein or fibre'}</div>
@@ -2306,10 +2427,11 @@ function renderCheckResult() {
     if (!it.nutriSource) it.nutriSource = 'label';
     renderCheckResult();
     window.scrollTo(0, 0);
+    focusCheckResult(false);
   };
   $('#qSaveGood').onclick = () => checkToAdd('good');
   $('#qSaveBad').onclick = () => checkToAdd('bad');
-  $('#qAnother').onclick = () => { resetCheck(); window.scrollTo(0, 0); };
+  $('#qAnother').onclick = () => { resetCheck(); window.scrollTo(0, 0); $('#qfBtn').focus({ preventScroll: true }); };
   $('#qDone').onclick = () => { resetCheck(); showView('list'); };
 }
 
@@ -2331,10 +2453,11 @@ function checkToAdd(status) {
   $('#fBrand').value = draft.prefill.brand;
   $('#fCat').value = draft.prefill.category;
   fillNutrition(draft.prefill.nutrition);
-  $('#vGood').classList.toggle('on', status === 'good');
-  $('#vBad').classList.toggle('on', status === 'bad');
+  setOn($('#vGood'), status === 'good');
+  setOn($('#vBad'), status === 'bad');
   $('#detailsCard').hidden = false;
   showView('add');
+  $('#detailsH').focus({ preventScroll: true });   // the result that held focus is hidden now
   toast('Check the details, then Save item');
 }
 
@@ -2494,6 +2617,7 @@ function zoomImage(src) {
   $('#zoomImg').src = src;
   $('#imgZoom').hidden = false;
 }
+let chooserReturn = null;                    // where focus was when the chooser opened: it goes back there
 async function openChooser(id) {
   const it = items.find(i => i.id === id);
   if (!it || !it.suggestReady) return;
@@ -2501,16 +2625,30 @@ async function openChooser(id) {
   $('#chName').textContent = it.name || 'Unnamed item';
   $('#chSource').textContent = it.suggestSource || '';
   $('#chImgCur').src = it.thumb || ''; $('#chImgNew').src = it.suggestThumb || '';
+  /* a modal dialog, like the picker: what is under it goes inert, focus moves in (to its title, not a button: it opens
+     by itself, maybe while someone is typing) and goes back where it was when it closes */
+  if ($('#imgChooser').hidden) { const ae = document.activeElement; chooserReturn = ae && ae !== document.body ? ae : null; }
   $('#imgChooser').hidden = false;
   document.body.style.overflow = 'hidden';
+  updateInert();
+  $('#chTitle').focus({ preventScroll: true });
   const cur = await bestCurrentBlob(it);
   if (cur && chooserId === id) $('#chImgCur').src = URL.createObjectURL(cur);
   const sug = await loadSuggBlob(it);
   if (sug && chooserId === id) $('#chImgNew').src = URL.createObjectURL(sug);
 }
-function closeChooser() { $('#imgChooser').hidden = true; chooserId = null; document.body.style.overflow = ''; }
+function closeChooser() {
+  const wasOpen = !$('#imgChooser').hidden;
+  $('#imgChooser').hidden = true; chooserId = null;
+  if (!$('#sheet').classList.contains('open')) document.body.style.overflow = '';   // a sheet under it keeps the page still
+  if (!wasOpen) return;
+  updateInert();
+  const to = chooserReturn; chooserReturn = null;
+  if (isShown(to)) focusNoScroll(to);
+}
 function maybeShowChooser() {
   if (!$('#imgChooser').hidden || !$('#lock').hidden) return;
+  if (!$('#picker').hidden || !$('#cam').hidden) return;   // not under the photo picker or the camera: its focus would be hidden there
   if (settings.ghLogin) return;                      // photo clean-up is the owner's chore
   const it = live().find(i => i.suggestReady && !chooserSnoozed.has(i.id));
   if (it) openChooser(it.id);
@@ -2614,7 +2752,7 @@ async function tryUnlock() {
     settings.ownList = false;
     try { localStorage.removeItem('fcLockStep'); } catch (e) {}
     await dbSetMeta('settings', { ...settings });
-    $('#lock').hidden = true;
+    setLockShown(false);
     applyModeUI();
     toast('Device set up ✓ — syncing…');
     syncNow(true);
@@ -2623,7 +2761,18 @@ async function tryUnlock() {
     $('#lockerr').textContent = 'Wrong password — try again.';
   } finally {
     $('#lockbtn').disabled = false; $('#lockbtn').textContent = 'Unlock';
+    lockRefocus($('#lockpw'));
   }
+}
+/* The setup screen is a modal dialog: the page behind it goes inert while it shows */
+function setLockShown(on) {
+  $('#lock').hidden = !on;
+  updateInert();
+}
+/* A setup button is disabled while it works, which drops its focus (to the page): it goes to the field to fix, or back */
+function lockRefocus(el) {
+  const ae = document.activeElement;
+  if (!$('#lock').hidden && (!ae || ae === document.body) && isShown(el)) el.focus({ preventScroll: true });
 }
 async function maybeShowLock(force) {
   if (!force && (ghConfigured() || settings.aiKey || settings.ownList)) return;
@@ -2639,7 +2788,8 @@ async function maybeShowLock(force) {
   let step = 'own';                       // new people start their own list; sign-in options sit one tap away
   try { if (localStorage.getItem('fcLockStep') === 'inv') step = 'inv'; } catch (e) {}
   showLockStep(step);
-  $('#lock').hidden = false;
+  setLockShown(true);
+  if (!$('#lock').contains(document.activeElement)) $('#lockTitle').focus({ preventScroll: true });   // focus moves in
 }
 function showLockStep(step, msg) {
   $('#lkOwn').hidden = step !== 'own';
@@ -2733,13 +2883,14 @@ async function onInvGo() {
     if (problem) { err.textContent = problem; return; }
     try { localStorage.removeItem('fcLockStep'); } catch (e) {}
     $('#invKey').value = '';
-    $('#lock').hidden = true;
+    setLockShown(false);
     applyModeUI();
     toast('Connected ✓ — hi ' + settings.userName + '! Loading the list…', 3500);
     renderList();
     await syncNow(true);
   } finally {
     btn.disabled = false; btn.textContent = '📋 Paste key & connect';
+    lockRefocus(btn);
   }
 }
 
@@ -2765,7 +2916,7 @@ async function onOwnGo() {
     if (problem) { err.textContent = problem; return; }
     try { localStorage.removeItem('fcLockStep'); localStorage.removeItem('fcOwnName'); } catch (e) {}
     $('#ownKey').value = '';
-    $('#lock').hidden = true;
+    setLockShown(false);
     applyModeUI();
     renderList();
     toast(settings.aiKey ? 'Hi ' + settings.userName + '! Tap Add and snap a product to start.'
@@ -2773,6 +2924,7 @@ async function onOwnGo() {
     processQueue();
   } finally {
     btn.disabled = false;
+    lockRefocus(!$('#ownName').value.trim() ? $('#ownName') : err.textContent ? $('#ownKey') : btn);   // no name, or a key that isn't one
   }
 }
 function applyModeUI() {                  // own-list phones never see syncing
@@ -3106,18 +3258,24 @@ function bindEvents() {
   $('#sheetClose').onclick = closeSheet;
   document.querySelector('#sheet .grab').addEventListener('click', closeSheet);
   document.addEventListener('keydown', e => {
-    if (e.key !== 'Escape') return;
+    if (e.key !== 'Escape') return;           // closes the top layer only
     if (!$('#cam').hidden) closeCamera();
-    else if (!$('#picker').hidden) closePicker(); else closeSheet();
+    else if (!$('#picker').hidden) closePicker();
+    else if (!$('#imgZoom').hidden) $('#imgZoom').click();       // a full-screen photo over the sheet or the chooser
+    else if (!$('#lock').hidden) return;                          // the setup screen has no way out by Escape
+    else if (!$('#imgChooser').hidden) $('#chLater').click();    // the chooser: Decide later
+    else closeSheet();
   });
   (() => {
     const sheet = $('#sheet');
     let startY = null, delta = 0, dragging = false;
     sheet.addEventListener('touchstart', e => {
+      if (e.touches.length > 1) { endDrag(); return; }       // two fingers: a pinch-zoom, not a drag
       startY = e.touches[0].clientY; delta = 0; dragging = false;
     }, { passive: true });
     sheet.addEventListener('touchmove', e => {
       if (startY === null) return;
+      if (e.touches.length > 1) { endDrag(); return; }
       const dy = e.touches[0].clientY - startY;
       if (!dragging) {
         if (dy > 6 && sheet.scrollTop <= 0) dragging = true;
@@ -3129,13 +3287,13 @@ function bindEvents() {
       sheet.style.transition = 'none';
       sheet.style.transform = 'translateY(' + delta + 'px)';
     }, { passive: false });
-    const endDrag = () => {
+    function endDrag() {
       if (startY === null && !dragging) return;
       sheet.style.transition = '';
       sheet.style.transform = '';
       if (dragging && delta > 110) closeSheet();
       startY = null; dragging = false; delta = 0;
-    };
+    }
     sheet.addEventListener('touchend', endDrag);
     sheet.addEventListener('touchcancel', endDrag);
   })();
@@ -3145,12 +3303,12 @@ function bindEvents() {
   $('#sortSel').onchange = e => { sortMode = e.target.value; renderList(); };
   document.querySelectorAll('#statusChips .chip').forEach(ch => ch.onclick = () => {
     filter = ch.dataset.f;
-    document.querySelectorAll('#statusChips .chip').forEach(c => c.classList.toggle('on', c === ch));
+    document.querySelectorAll('#statusChips .chip').forEach(c => setOn(c, c === ch));
     renderList();
   });
   document.querySelectorAll('#nutChips .chip').forEach(ch => ch.onclick = () => {
     nutMin = +ch.dataset.n;
-    document.querySelectorAll('#nutChips .chip').forEach(c => c.classList.toggle('on', c === ch));
+    document.querySelectorAll('#nutChips .chip').forEach(c => setOn(c, c === ch));
     renderList();
   });
 
@@ -3176,8 +3334,8 @@ function bindEvents() {
   $('#qBarcode').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runCheck(); } });
 
   $('#backBtn').onclick = () => { resetForm(); showView('list'); };
-  $('#vGood').onclick = () => { draft.status = 'good'; $('#vGood').classList.add('on'); $('#vBad').classList.remove('on'); };
-  $('#vBad').onclick = () => { draft.status = 'bad'; $('#vBad').classList.add('on'); $('#vGood').classList.remove('on'); };
+  $('#vGood').onclick = () => { draft.status = 'good'; setOn($('#vGood'), true); setOn($('#vBad'), false); };
+  $('#vBad').onclick = () => { draft.status = 'bad'; setOn($('#vBad'), true); setOn($('#vGood'), false); };
   $('#saveBtn').onclick = saveForm;
 
   $('#sSave').onclick = saveSettings;
@@ -3190,7 +3348,7 @@ function bindEvents() {
   $('#bundleBtn').onclick = exportBundle;
   $('#lockbtn').onclick = tryUnlock;
   $('#lockpw').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
-  $('#lockskip').onclick = () => { $('#lock').hidden = true; };
+  $('#lockskip').onclick = () => setLockShown(false);
   $('#lkPwBtn').onclick = () => showLockStep('pw');
   $('#lkInvBtn').onclick = () => showLockStep('inv');
   $('#lkPwBack').onclick = () => showLockStep('who');
@@ -3251,15 +3409,9 @@ function bindEvents() {
 }
 
 /* ---------------- init ---------------- */
-function blockPinchZoom() {
-  // Safari (iOS/macOS) pinch gestures
-  ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev =>
-    document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
-  // any two-finger zoom (covers browsers that honour touch events)
-  document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
-  // ctrl+wheel / trackpad pinch on desktop
-  document.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
-  // stray double-tap zoom safety net
+/* Pinch-zoom and ctrl+wheel zoom stay available (WCAG 1.4.4): the old Safari-gesture, two-finger and ctrl+wheel
+   blockers are gone. Only double-tap zoom is held off (touch-action:manipulation does it; this is the safety net). */
+function blockDoubleTapZoom() {
   let lastTouch = 0;
   document.addEventListener('touchend', e => {
     const now = Date.now();
@@ -3305,7 +3457,7 @@ function applyCorrections(list) {
   return changed;
 }
 async function init() {
-  blockPinchZoom();
+  blockDoubleTapZoom();
   await openDB();
   items = (await dbAllItems()) || [];
   const st = await dbGetMeta('settings'); if (st) settings = Object.assign(settings, st);
