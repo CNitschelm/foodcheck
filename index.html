@@ -292,6 +292,12 @@ main{max-width:860px;margin:0 auto;
 .dimg{width:100%;max-height:270px;object-fit:contain;border-radius:18px;background:var(--surface-2);cursor:zoom-in}
 .dthumbs{display:flex;gap:8px;margin-top:10px}
 .dthumbs img{width:64px;height:64px;object-fit:cover;border:1px solid var(--line);border-radius:12px;cursor:pointer}
+/* a photo that opens by keyboard too: a plain button around the image that adds nothing to see; the focus ring sits on the image */
+.imgbtn{display:block;width:100%;margin:0;padding:0;border:0;border-radius:0;background:none}
+.dthumbs .imgbtn{width:auto}
+.imgbtn:active{transform:none}
+.imgbtn:focus-visible{outline:none}
+.imgbtn:focus-visible>img{outline:2px solid var(--brand-fg);outline-offset:2px}
 .dtitle{margin:16px 0 4px;font-size:var(--t-2xl);font-weight:700;letter-spacing:-.02em;line-height:1.2}
 .dtitle:focus{outline:none}   /* focus lands here when the sheet opens (tabindex=-1, not a control) */
 #detailsH:focus,#cards .empty:focus,#cam:focus,#imgZoom:focus,#chTitle:focus,#lockTitle:focus{outline:none}   /* the same for the form Edit opens, an emptied list, the camera, the full-screen photo, the photo chooser and the setup screen */
@@ -831,8 +837,8 @@ a.lklink{display:flex;text-decoration:none}
   <h2 class="chtitle" id="chTitle" tabindex="-1">Pick the better photo</h2>
   <div class="hint" id="chName" style="margin-top:0"></div>
   <div class="cmpstack">
-    <div class="cmprow"><div class="cmplbl"><svg class="i" aria-hidden="true"><use href="#i-camera"/></svg>Your photo</div><img id="chImgCur" alt="" data-side="cur"><span class="tapzoom">tap to enlarge</span></div>
-    <div class="cmprow"><div class="cmplbl"><svg class="i" aria-hidden="true"><use href="#i-sparkle"/></svg>Suggested</div><img id="chImgNew" alt="" data-side="new"><span class="tapzoom">tap to enlarge</span></div>
+    <div class="cmprow"><div class="cmplbl"><svg class="i" aria-hidden="true"><use href="#i-camera"/></svg>Your photo</div><button type="button" class="imgbtn" id="chZoomCur" aria-label="Enlarge your photo"><img id="chImgCur" alt="" data-side="cur"></button><span class="tapzoom">tap to enlarge</span></div>
+    <div class="cmprow"><div class="cmplbl"><svg class="i" aria-hidden="true"><use href="#i-sparkle"/></svg>Suggested</div><button type="button" class="imgbtn" id="chZoomNew" aria-label="Enlarge the suggested photo"><img id="chImgNew" alt="" data-side="new"></button><span class="tapzoom">tap to enlarge</span></div>
   </div>
   <div class="hint" id="chSource" style="text-align:center;margin-top:8px"></div>
   <div class="chbtns">
@@ -1370,21 +1376,20 @@ async function openDetail(id) {
   const imgsMeta = it.imgs || (it.hasImage ? { f: 1 } : {});
   wrap.innerHTML = '<div class="dthumbs" hidden></div>';
   const thumbsRow = wrap.querySelector('.dthumbs');
+  const addHero = src => {                               // tap, Enter or Space on the big photo -> full screen
+    const img = document.createElement('img'); img.className = 'dimg'; img.src = src; img.alt = it.name || '';
+    wrap.insertBefore(photoButton(img, 'Enlarge photo', () => zoomImage(img.src)), thumbsRow);
+  };
   const addImg = blob => {
     const url = URL.createObjectURL(blob);
-    const hero = wrap.querySelector('.dimg');
-    if (!hero) {
-      const img = document.createElement('img'); img.className = 'dimg'; img.src = url; img.alt = it.name || '';
-      img.onclick = () => zoomImage(img.src);            // tap big photo -> full screen
-      wrap.insertBefore(img, thumbsRow);
-    } else {
+    if (!wrap.querySelector('.dimg')) addHero(url);
+    else {
       thumbsRow.hidden = false;
       const img = document.createElement('img'); img.src = url; img.alt = '';
-      img.onclick = () => {                              // tap thumb -> swap into the big slot
-        const h = wrap.querySelector('.dimg');
+      thumbsRow.appendChild(photoButton(img, 'Show photo ' + (thumbsRow.children.length + 2) + ' large', () => {
+        const h = wrap.querySelector('.dimg');           // a thumb -> swap into the big slot
         const tmp = h.src; h.src = img.src; img.src = tmp;
-      };
-      thumbsRow.appendChild(img);
+      }));
     }
   };
   for (const s of SLOTS) {
@@ -1401,11 +1406,7 @@ async function openDetail(id) {
     }
   }
   if (myToken !== detailToken) return;
-  if (!wrap.querySelector('.dimg') && it.thumb) {
-    const img = document.createElement('img'); img.className = 'dimg'; img.src = it.thumb; img.alt = it.name || '';
-    img.onclick = () => zoomImage(img.src);
-    wrap.insertBefore(img, thumbsRow);
-  }
+  if (!wrap.querySelector('.dimg') && it.thumb) addHero(it.thumb);
 
   const dupBtn = $('#dDelDup');
   if (dupBtn) dupBtn.onclick = async () => {
@@ -2619,6 +2620,12 @@ async function bestCurrentBlob(it) {
    (the chooser or the setup screen can open under the photo): then focus goes to the title of the layer on top, as
    when that layer opens */
 let zoomReturn = null;
+/* a photo that opens by tap, click, Enter or Space: the image inside a button (.imgbtn) named for what it does */
+function photoButton(img, label, onPress) {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'imgbtn';
+  b.setAttribute('aria-label', label); b.appendChild(img); b.onclick = onPress;
+  return b;
+}
 function zoomImage(src) {
   $('#zoomImg').src = src;
   if ($('#imgZoom').hidden) { const ae = document.activeElement; zoomReturn = ae && ae !== document.body ? ae : null; }
@@ -3430,8 +3437,8 @@ function bindEvents() {
     if (it) { toast('Updating photo…', 1200); await acceptSuggestion(it); }
     setTimeout(maybeShowChooser, 500);
   };
-  $('#chImgCur').onclick = e => zoomImage(e.target.src);
-  $('#chImgNew').onclick = e => zoomImage(e.target.src);
+  $('#chZoomCur').onclick = () => zoomImage($('#chImgCur').src);
+  $('#chZoomNew').onclick = () => zoomImage($('#chImgNew').src);
   $('#imgZoom').onclick = closeZoom;
   $('#chKeep').onclick = async () => {
     const it = items.find(i => i.id === chooserId);
