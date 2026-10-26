@@ -1095,7 +1095,7 @@ function mergeVerdicts(a, b) {
   const out = {};
   for (const src of [a || {}, b || {}]) for (const k of Object.keys(src)) {
     const e = src[k];
-    if (!e || !e.v) continue;
+    if (!e || !vcls(e.v)) continue;                 // only good or bad, from this device as from a sync (GAP3-1)
     if (!out[k] || (e.t || 0) > (out[k].t || 0)) out[k] = { v: e.v, t: e.t || 0 };
   }
   return out;
@@ -3526,7 +3526,7 @@ function applyCorrections(list) {
 async function init() {
   blockDoubleTapZoom();
   await openDB();
-  items = (await dbAllItems()) || [];
+  items = ((await dbAllItems()) || []).map(safeItem);   // what an older version or a damaged database stored (GAP3-1)
   const st = await dbGetMeta('settings'); if (st) settings = Object.assign(settings, st);
   imgDirty = new Set((await dbGetMeta('imgDirty')) || []);
   if (!settings.userName && (ghConfigured() || settings.aiKey) && !settings.ghLogin && !settings.ownList) {
