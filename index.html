@@ -899,6 +899,25 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g,
 const uid = () => ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID()
   : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
 const num = v => (v === undefined || v === null || v === '' || isNaN(+v)) ? null : +v;
+/* A backup file, a synced list or a damaged database can hold anything: only "good" or "bad" becomes a class name,
+   and safeItem keeps only those verdicts and numeric nutrition values (19 Oct 2026 site audit, GAP3-1). */
+const vcls = v => (v === 'good' || v === 'bad') ? v : '';
+function safeItem(it) {
+  if (!it || typeof it !== 'object') return it;
+  if ('status' in it && !vcls(it.status)) delete it.status;
+  if (it.verdicts !== undefined) {
+    if (!it.verdicts || typeof it.verdicts !== 'object' || Array.isArray(it.verdicts)) delete it.verdicts;
+    else for (const k of Object.keys(it.verdicts)) {
+      const e = it.verdicts[k];
+      if (!e || typeof e !== 'object' || !vcls(e.v)) delete it.verdicts[k];
+    }
+  }
+  if (it.nutrition !== undefined) {
+    if (!it.nutrition || typeof it.nutrition !== 'object' || Array.isArray(it.nutrition)) it.nutrition = {};
+    else for (const k of Object.keys(it.nutrition)) it.nutrition[k] = num(it.nutrition[k]);
+  }
+  return it;
+}
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 /* a toggle's look (.on) and what assistive tech is told (aria-pressed, or aria-current for the nav) change together */
 function setOn(el, on, current) {
@@ -1175,6 +1194,7 @@ function dupPartner(it) {
 
 /* ---------------- merge (sync core) ---------------- */
 function mergeItems(local, remote) {
+  remote = remote.map(safeItem);                   // other people's data arrives here (GAP3-1)
   const map = new Map();
   for (const r of remote) map.set(r.id, r);
   let localAhead = false, remoteApplied = false;
@@ -1272,7 +1292,7 @@ function renderList() {
       </span>
       ${it.thumb ? `<img class="ph" src="${esc(it.thumb)}" alt="" loading="lazy">`
                  : `<span class="noph" aria-hidden="true">${st === 'bad' ? '✕' : '🛒'}</span>`}
-      <span class="badge ${st}" aria-hidden="true">${st === 'good' ? '✓ Good' : '✕ Bad'}</span>
+      <span class="badge ${vcls(st)}" aria-hidden="true">${st === 'good' ? '✓ Good' : '✕ Bad'}</span>
       ${disagrees(it) ? '<span class="disagree" title="You two disagree">⚡ split</span>' : ''}
       ${it.pending && it.lastAiErr === AI_PAUSED_MSG && aiPausedUntil > Date.now() ? '<span class="pendchip">⏸ AI paused</span>'
         : it.pending ? '<span class="pendchip">🤖 identifying…</span>'
@@ -1295,7 +1315,7 @@ const NUT_ROWS = [
 /* shared renderers — used by the detail sheet and by Quick check */
 function fmtNut(v, unit) {
   const x = Number(v);
-  if (!isFinite(x)) return v;
+  if (!isFinite(x)) return esc(v);                 // its output goes into the nutrition table's HTML
   if (unit === 'kcal') return String(Math.round(x));
   const r = Math.round(x * 10) / 10;
   return String(r % 1 === 0 ? r.toFixed(0) : r.toFixed(1));
@@ -1352,7 +1372,7 @@ async function openDetail(id) {
     ${(() => { const all = verdictEntries(it); if (!all.length) return '';
       const lbl = v => v === 'good' ? '✓ good' : '✕ bad';
       return `<div class="whorow">${all.sort((a, b) => (a.who === meId() ? -1 : 1))
-        .map(e => `<span class="whochip ${e.v}${e.who === meId() ? ' mine' : ''}">${esc(e.who)}: ${lbl(e.v)}</span>`).join('')}</div>`; })()}
+        .map(e => `<span class="whochip ${vcls(e.v)}${e.who === meId() ? ' mine' : ''}">${esc(e.who)}: ${lbl(e.v)}</span>`).join('')}</div>`; })()}
     ${it.notes ? `<div class="dnotes">${esc(it.notes)}</div>` : ''}
     ${rateBoxHTML(it)}
     ${nutRows ? `<div class="hint" style="margin-top:10px;margin-bottom:2px">Nutrition per 100 g${it.nutriSource === 'estimate' ? ' · estimated' : it.nutriSource === 'verified' ? ' · verified' : ''}</div><table class="nutritable"><tbody>${nutRows}</tbody></table>` : ''}
@@ -3273,6 +3293,8 @@ async function importJSON(file) {
     if (!Array.isArray(j.items)) throw new Error('bad file');
     let n = 0;
     for (const raw of j.items) {
+      if (!raw || typeof raw !== 'object') continue;
+      safeItem(raw);
       const img = raw._image; const imgsMap = raw._images; delete raw._image; delete raw._images;
       const existing = items.find(i => i.id === raw.id);
       if (!existing || (raw.updatedAt || 0) > (existing.updatedAt || 0)) {
@@ -3543,7 +3565,7 @@ init().catch(e => { console.error(e); toast('Startup error: ' + e.message, 6000)
 
 /* test hooks (used by headless smoke tests) */
 window.__FC = {
-  mergeItems, esc, uid, num, matches, onSlotFile, onCheckFile, openPicker, closePicker, photoTargets, acceptPhotos, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, nutriRate, fmtNut, tidyNutrition, plausibility, scaleNutrition, aiFillGaps, expectedKcalRange, zoomImage, deriveStatus, setMyVerdict, mergeVerdicts, disagrees, myVerdict, othersVerdicts, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
+  mergeItems, esc, uid, num, vcls, safeItem, importJSON, matches, onSlotFile, onCheckFile, openPicker, closePicker, photoTargets, acceptPhotos, encryptBundle, decryptBundle, enrichItem, processQueue, aiToItem, offToItem, fillEmpty, aiIdentify, dupPartner, saveForm, validGTIN, nutriRate, fmtNut, tidyNutrition, plausibility, scaleNutrition, aiFillGaps, expectedKcalRange, zoomImage, deriveStatus, setMyVerdict, mergeVerdicts, disagrees, myVerdict, othersVerdicts, findBetterImage, acceptSuggestion, declineSuggestion, maybeShowChooser, enhancePhoto, relevant, searchWebImage, bigOFF,
   identifyNoSave, runCheck, startCheck, resetCheck, renderCheckResult, checkToAdd, rateBoxHTML, nutriRowsHTML,
   qState: () => ({ qResult, qPhotos, qBusy }),
   setQ: (res, photos) => { qResult = res; if (photos) qPhotos = photos; },
